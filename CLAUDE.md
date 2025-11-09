@@ -75,11 +75,33 @@ Dependencies are managed using Gradle Version Catalogs:
 
 ### Building APKs
 
-#### Build Dev Release (Lightweight, No Firebase)
+#### Build Dev Debug (Signed, Ready to Install)
+```bash
+./gradlew assembleDevDebug
+```
+**Output Location:**
+```
+app/build/outputs/apk/dev/debug/app-dev-universal-debug.apk
+```
+
+This builds a **signed APK** with debug certificate that can be installed directly on any Android device.
+
+**Architecture-specific signed APKs:**
+- ARM64: `app/build/outputs/apk/dev/debug/app-dev-arm64-v8a-debug.apk`
+- ARMv7: `app/build/outputs/apk/dev/debug/app-dev-armeabi-v7a-debug.apk`
+- x86_64: `app/build/outputs/apk/dev/debug/app-dev-x86_64-debug.apk`
+- x86: `app/build/outputs/apk/dev/debug/app-dev-x86-debug.apk`
+
+#### Build Dev Release (Unsigned, Optimized)
 ```bash
 ./gradlew assembleDevRelease
 ```
-Output: `app/build/outputs/apk/dev/release/`
+**Output Location:**
+```
+app/build/outputs/apk/dev/release/app-dev-universal-release-unsigned.apk
+```
+
+**Note:** Release APKs are unsigned and won't install directly. Use debug build for testing.
 
 #### Build Standard Release (Full Features)
 ```bash
@@ -89,8 +111,22 @@ Output: `app/build/outputs/apk/standard/release/`
 
 #### APK Variants
 The build generates:
-- Universal APK (all ABIs)
+- Universal APK (all ABIs) - **Recommended for most users**
 - Split APKs: arm64-v8a, armeabi-v7a, x86, x86_64
+
+#### Installing APKs
+
+**Via ADB (USB):**
+```bash
+adb install app/build/outputs/apk/dev/debug/app-dev-universal-debug.apk
+```
+
+**Via File Transfer:**
+```bash
+# Copy to phone's Download folder
+adb push app/build/outputs/apk/dev/debug/app-dev-universal-debug.apk /sdcard/Download/TachiyomiAT.apk
+```
+Then open Files app on phone and install the APK.
 
 ---
 
