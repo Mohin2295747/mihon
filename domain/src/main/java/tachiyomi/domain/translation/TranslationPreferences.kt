@@ -7,7 +7,7 @@ class TranslationPreferences(
 ) {
 
     fun autoTranslateAfterDownload() = preferenceStore.getBoolean("auto_translate_after_download", false)
-    fun translateFromLanguage() = preferenceStore.getString("translate_language_from", "CHINESE")
+    fun translateFromLanguage() = preferenceStore.getString("translate_language_from", "AUTO_DETECT")
     fun translateToLanguage() = preferenceStore.getString("translate_language_to", "ENGLISH")
     fun translationFont() = preferenceStore.getInt("translation_font", 0)
 

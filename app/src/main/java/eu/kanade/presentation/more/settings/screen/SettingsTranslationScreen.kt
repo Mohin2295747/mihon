@@ -46,7 +46,6 @@ object SettingsTranslationScreen : SearchableSettings {
         translationPreferences: TranslationPreferences,
     ): Preference.PreferenceGroup {
         val fromLangs = TextRecognizerLanguage.entries
-        val toLangs = TextTranslatorLanguage.entries
         return Preference.PreferenceGroup(
             title = stringResource(ATMR.strings.pref_group_setup),
             preferenceItems = persistentListOf(
@@ -54,11 +53,6 @@ object SettingsTranslationScreen : SearchableSettings {
                     pref = translationPreferences.translateFromLanguage(),
                     title = stringResource(ATMR.strings.pref_translate_from),
                     entries = fromLangs.associate { it.name to it.label }.toImmutableMap(),
-                ),
-                Preference.PreferenceItem.ListPreference(
-                    pref = translationPreferences.translateToLanguage(),
-                    title = stringResource(ATMR.strings.pref_translate_to),
-                    entries = toLangs.associate { it.name to it.label }.toImmutableMap(),
                 ),
             ),
         )

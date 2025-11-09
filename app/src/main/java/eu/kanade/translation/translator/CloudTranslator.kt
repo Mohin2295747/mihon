@@ -75,10 +75,19 @@ class CloudTranslator(
                         for (block in blocks) {
                             try {
                                 if (block.text.isNotBlank()) {
+                                    // Build translation options
+                                    val options = mutableListOf<Translate.TranslateOption>(
+                                        Translate.TranslateOption.targetLanguage(toLang.code)
+                                    )
+
+                                    // Only include source language if not auto-detect
+                                    if (fromLang != TextRecognizerLanguage.AUTO_DETECT) {
+                                        options.add(Translate.TranslateOption.sourceLanguage(fromLang.code))
+                                    }
+
                                     val translation = translateService!!.translate(
                                         block.text,
-                                        Translate.TranslateOption.sourceLanguage(fromLang.code),
-                                        Translate.TranslateOption.targetLanguage(toLang.code)
+                                        *options.toTypedArray()
                                     )
 
                                     block.translation = translation.translatedText ?: block.text
