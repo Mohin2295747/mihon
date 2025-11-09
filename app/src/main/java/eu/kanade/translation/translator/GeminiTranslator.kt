@@ -13,6 +13,7 @@ import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.TranslatorOptions
 import eu.kanade.translation.model.PageTranslation
 import eu.kanade.translation.recognizer.TextRecognizerLanguage
+import logcat.LogPriority
 import logcat.logcat
 import org.json.JSONObject
 
@@ -27,7 +28,7 @@ class GeminiTranslator(
 ) : TextTranslator {
 
     private var model: GenerativeModel = GenerativeModel(
-        modelName = modelName,
+        modelName = modelName.ifEmpty { "gemini-2.0-flash-exp" },
         apiKey = apiKey,
         generationConfig = generationConfig {
             topK = 30
@@ -94,22 +95,46 @@ class GeminiTranslator(
 
     override suspend fun translate(pages: MutableMap<String, PageTranslation>) {
         try {
+            logcat { "GeminiTranslator: Starting translation from ${fromLang.label} to ${toLang.label}" }
+            logcat { "GeminiTranslator: Using model with temp=$temp, maxTokens=$maxOutputToken" }
+
             val data = pages.mapValues { (k, v) -> v.blocks.map { b -> b.text } }
             val json = JSONObject(data)
+
+            logcat { "GeminiTranslator: Sending ${pages.size} pages with ${data.values.sumOf { it.size }} blocks to API" }
+
             val response = model.generateContent(json.toString())
+
+            logcat { "GeminiTranslator: Received response from Gemini API" }
+
             val resJson = JSONObject("${response.text}")
+            var totalBlocks = 0
+            var translatedBlocks = 0
+            var removedWatermarks = 0
+
             for ((k, v) in pages) {
+                totalBlocks += v.blocks.size
                 v.blocks.forEachIndexed { i, b ->
                     run {
                         val res = resJson.optJSONArray(k)?.optString(i, "NULL")
                         b.translation = if (res == null || res == "NULL") b.text else res
+                        if (res != null && res != "NULL") translatedBlocks++
                     }
                 }
+                val originalSize = v.blocks.size
                 v.blocks =
                     v.blocks.filterNot { it.translation.contains("RTMTH") }.toMutableList()
+                removedWatermarks += (originalSize - v.blocks.size)
+            }
+
+            logcat {
+                "GeminiTranslator: Translation completed - $translatedBlocks/$totalBlocks blocks, " +
+                    "removed $removedWatermarks watermark blocks"
             }
         } catch (e: Exception) {
-            logcat { "Image Translation Error : ${e.stackTraceToString()}" }
+            logcat(LogPriority.ERROR) {
+                "GeminiTranslator: Translation error: ${e.message}\n${e.stackTraceToString()}"
+            }
             throw e
         }
     }

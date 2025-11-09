@@ -8,6 +8,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
+import logcat.LogPriority
 import logcat.logcat
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -27,8 +28,14 @@ class OpenRouterTranslator(
     
     override suspend fun translate(pages: MutableMap<String, PageTranslation>) {
         try {
+            logcat { "OpenRouterTranslator: Starting translation from ${fromLang.label} to ${toLang.label}" }
+            logcat { "OpenRouterTranslator: Using model $modelName with temp=$temp, maxTokens=$maxOutputToken" }
+
             val data = pages.mapValues { (k, v) -> v.blocks.map { b -> b.text } }
             val json = JSONObject(data)
+
+            logcat { "OpenRouterTranslator: Sending ${pages.size} pages with ${data.values.sumOf { it.size }} blocks to API" }
+
             val mediaType = "application/json; charset=utf-8".toMediaType()
             val jsonObject = buildJsonObject {
                 put("model", modelName)
@@ -59,6 +66,16 @@ class OpenRouterTranslator(
                 
             val response = okHttpClient.newCall(build).await()
             val rBody = response.body
+
+            logcat { "OpenRouterTranslator: Received response from OpenRouter API (HTTP ${response.code})" }
+
+            if (!response.isSuccessful) {
+                logcat(LogPriority.ERROR) {
+                    "OpenRouterTranslator: API request failed with code ${response.code}: ${rBody?.string()}"
+                }
+                throw Exception("OpenRouter API request failed: ${response.code}")
+            }
+
             val json2 = JSONObject(rBody.string())
             val resJson = JSONObject(
                 json2.getJSONArray("choices")
@@ -67,19 +84,41 @@ class OpenRouterTranslator(
                     .getString("content")
             )
 
+            var totalBlocks = 0
+            var translatedBlocks = 0
+            var removedWatermarks = 0
+
             for ((k, v) in pages) {
+                totalBlocks += v.blocks.size
                 v.blocks.forEachIndexed { i, b ->
                     run {
                         val res = resJson.optJSONArray(k)?.optString(i, "NULL")
                         b.translation = if (res == null || res == "NULL") b.text else res
+                        if (res != null && res != "NULL") translatedBlocks++
                     }
                 }
+<<<<<<< HEAD
                 v.blocks = v.blocks.filterNot { 
                     it.translation.contains("RTMTH") 
                 }.toMutableList()
             }
+=======
+                val originalSize = v.blocks.size
+                v.blocks =
+                    v.blocks.filterNot { it.translation.contains("RTMTH") }.toMutableList()
+                removedWatermarks += (originalSize - v.blocks.size)
+            }
+
+            logcat {
+                "OpenRouterTranslator: Translation completed - $translatedBlocks/$totalBlocks blocks, " +
+                    "removed $removedWatermarks watermark blocks"
+            }
+
+>>>>>>> 029632052 (Upgrade translation system with Gemini 2.5 Flash and Google Cloud Translation API)
         } catch (e: Exception) {
-            logcat { "Image Translation Error : ${e.stackTraceToString()}" }
+            logcat(LogPriority.ERROR) {
+                "OpenRouterTranslator: Translation error: ${e.message}\n${e.stackTraceToString()}"
+            }
             throw e
         }
     }

@@ -16,7 +16,7 @@ interface TextTranslator : Closeable {
 
 enum class TextTranslators(val label: String) {
     MLKIT("MlKit (On Device)"),
-    GOOGLE("Google Translate"),
+    CLOUD_TRANSLATE("Google Cloud Translation [API KEY]"),
     GEMINI("Gemini AI [API KEY]"),
     OPENROUTER("OpenRouter [API KEY]");
 
@@ -40,6 +40,7 @@ enum class TextTranslators(val label: String) {
         
         return when (this) {
             MLKIT -> MLKitTranslator(fromLang, toLang)
+<<<<<<< HEAD
             GOOGLE -> GoogleTranslator(fromLang, toLang)
             GEMINI -> GeminiTranslator(
                 fromLang, 
@@ -57,6 +58,11 @@ enum class TextTranslators(val label: String) {
                 maxOutputTokens, 
                 temperature
             )
+=======
+            CLOUD_TRANSLATE -> CloudTranslator(fromLang, toLang, apiKey)
+            GEMINI -> GeminiTranslator(fromLang, toLang,apiKey,modelName,maxOutputTokens,temperature)
+            OPENROUTER -> OpenRouterTranslator(fromLang, toLang,apiKey,modelName,maxOutputTokens,temperature)
+>>>>>>> 029632052 (Upgrade translation system with Gemini 2.5 Flash and Google Cloud Translation API)
         }
     }
 

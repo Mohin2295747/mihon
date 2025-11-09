@@ -9,6 +9,7 @@ sqlite = "2.6.2"
 mlkit-text-recognition-version = "16.0.1"
 mlkit-text-translate-version = "17.0.3"
 google-generativeai-version = "0.9.0"
+<<<<<<< HEAD
 voyager = "1.1.0-beta03"
 spotless = "8.3.0"
 ktlint-core = "1.8.0"
@@ -16,6 +17,13 @@ firebase-bom = "34.10.0"
 markdown = "0.39.2"
 junit = "6.0.3"
 materialKolor = "5.0.0-alpha07"
+=======
+google-cloud-translate-version = "2.56.0"
+voyager = "1.0.1"
+spotless = "7.0.0.BETA4"
+ktlint-core = "1.5.0"
+firebase-bom = "33.7.0"
+>>>>>>> 029632052 (Upgrade translation system with Gemini 2.5 Flash and Google Cloud Translation API)
 
 [libraries]
 desugar = "com.android.tools:desugar_jdk_libs:2.1.5"
@@ -41,6 +49,7 @@ mlkit-text-recognition-japanese = { module = "com.google.mlkit:text-recognition-
 mlkit-text-recognition-korean = { module = "com.google.mlkit:text-recognition-korean", version.ref = "mlkit-text-recognition-version" }
 mlkit-text-translate = { module = "com.google.mlkit:translate", version.ref = "mlkit-text-translate-version" }
 google-generativeai = { module = "com.google.ai.client.generativeai:generativeai", version.ref = "google-generativeai-version" }
+google-cloud-translate = { module = "com.google.cloud:google-cloud-translate", version.ref = "google-cloud-translate-version" }
 
 disklrucache = "com.jakewharton:disklrucache:2.0.2"
 unifile = "com.github.tachiyomiorg:unifile:e0def6b3dc"

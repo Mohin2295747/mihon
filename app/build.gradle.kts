@@ -122,12 +122,18 @@ android {
                 "META-INF/**/LICENSE.txt",
                 "META-INF/*.properties",
                 "META-INF/*.version",
+<<<<<<< HEAD
                 "META-INF/DEPENDENCIES",
                 "META-INF/LICENSE",
                 "META-INF/NOTICE",
                 "META-INF/README.md",
             )
         }
+=======
+                "META-INF/INDEX.LIST",
+            ),
+        )
+>>>>>>> 029632052 (Upgrade translation system with Gemini 2.5 Flash and Google Cloud Translation API)
     }
 
     dependenciesInfo {
@@ -300,6 +306,9 @@ dependencies {
     implementation(libs.mlkit.text.recognition.chinese)
     implementation(libs.mlkit.text.translate)
     implementation(libs.google.generativeai)
+    implementation(libs.google.cloud.translate) {
+        exclude(group = "org.conscrypt", module = "conscrypt-openjdk-uber")
+    }
 }
 
 androidComponents {
