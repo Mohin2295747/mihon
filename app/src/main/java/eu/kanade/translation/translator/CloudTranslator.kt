@@ -1,5 +1,6 @@
 package eu.kanade.translation.translator
 
+import android.text.Html
 import com.google.cloud.translate.Translate
 import com.google.cloud.translate.TranslateOptions
 import eu.kanade.translation.model.PageTranslation
@@ -90,7 +91,9 @@ class CloudTranslator(
                                         *options.toTypedArray()
                                     )
 
-                                    block.translation = translation.translatedText ?: block.text
+                                    // Decode HTML entities (&#39; -> ', &quot; -> ", etc.)
+                                    val translatedText = translation.translatedText ?: block.text
+                                    block.translation = decodeHtmlEntities(translatedText)
                                     translatedBlocks++
 
                                     logcat { "Translated block: '${block.text.take(30)}...' -> '${block.translation.take(30)}...'" }
@@ -136,5 +139,20 @@ class CloudTranslator(
     override fun close() {
         translateService = null
         logcat { "CloudTranslator closed" }
+    }
+
+    /**
+     * Decode HTML entities in translated text.
+     * Converts &#39; -> ', &quot; -> ", &amp; -> &, etc.
+     */
+    private fun decodeHtmlEntities(text: String): String {
+        return try {
+            Html.fromHtml(text, Html.FROM_HTML_MODE_LEGACY).toString()
+        } catch (e: Exception) {
+            logcat(LogPriority.WARN) {
+                "Failed to decode HTML entities: ${e.message}"
+            }
+            text // Fallback to original text
+        }
     }
 }
