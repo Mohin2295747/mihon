@@ -127,12 +127,12 @@ translator.translate(pages)
 - Batch translation of multiple pages
 - JSON-based structured translation
 - Configurable model, temperature, and tokens
-- Currently using Gemini 2.0 Flash Experimental
+- Currently using Gemini 2.5 Flash (stable, production-ready)
 
 **Setup**:
 1. Get Gemini API key from https://makersuite.google.com/app/apikey
 2. Add API key in Settings > Translation > Engine API Key
-3. Configure model (default: gemini-2.0-flash-exp)
+3. Configure model (default: gemini-2.5-flash - stable & recommended)
 4. Adjust temperature (0.0-2.0, default: 1.0)
 5. Set max output tokens (default: 8192)
 
@@ -142,17 +142,19 @@ val translator = GeminiTranslator(
     fromLang = TextRecognizerLanguage.CHINESE,
     toLang = TextTranslatorLanguage.ENGLISH,
     apiKey = "your-api-key",
-    modelName = "gemini-2.0-flash-exp",
+    modelName = "gemini-2.5-flash",
     maxOutputToken = 8192,
     temp = 1.0f
 )
 translator.translate(pages)
 ```
 
-**Models**:
-- `gemini-2.0-flash-exp` - Fast, cost-effective (recommended)
-- `gemini-1.5-pro` - Higher quality, slower, more expensive
-- `gemini-1.5-flash` - Balance of speed and quality
+**Available Models** (as of 2025):
+- `gemini-2.5-flash` - **Recommended**: Best price-performance, stable (default)
+- `gemini-2.5-pro` - Highest quality with advanced reasoning
+- `gemini-2.5-flash-lite` - Fastest, optimized for cost-efficiency
+- `gemini-2.0-flash` - Previous generation, stable
+- Preview models: `gemini-2.5-flash-preview-09-2025` (experimental, may change)
 
 **System Prompt**:
 The Gemini translator uses a specialized system prompt that:
@@ -162,9 +164,11 @@ The Gemini translator uses a specialized system prompt that:
 - Preserves cultural idioms and expressions
 - Handles speech bubbles, sound effects, and narration
 
-**Pricing**:
-- Gemini 2.0 Flash: ~$0.10 per 1M input tokens, $0.30 per 1M output tokens
-- Free tier: 15 requests/minute, 1500 requests/day
+**Pricing** (Google AI Studio API):
+- Gemini 2.5 Flash: Free tier available with generous limits
+- Free tier limits: 15 requests/minute, 1500 requests/day
+- Paid tier: ~$0.075 per 1M input tokens, $0.30 per 1M output tokens
+- Context: Translating 100 manga pages (~10,000 tokens) costs approximately $0.001-$0.004
 
 **Best For**:
 - Manga/manhwa/manhua translation
