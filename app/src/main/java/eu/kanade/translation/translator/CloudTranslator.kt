@@ -58,7 +58,12 @@ class CloudTranslator(
         initializeServiceIfNeeded()
 
         try {
-            logcat { "Starting Cloud Translation: ${pages.size} pages, from ${fromLang.label} to ${toLang.label}" }
+            // Convert to proper ISO 639-1 codes for Google Cloud API
+            val sourceCode = fromLang.toCloudApiCode()
+            val targetCode = toLang.toCloudApiCode()
+
+            logcat { "Starting Cloud Translation: ${pages.size} pages" }
+            logcat { "Languages: ${fromLang.label} ($sourceCode) -> ${toLang.label} ($targetCode)" }
 
             withContext(Dispatchers.IO) {
                 var totalBlocks = 0
@@ -76,14 +81,14 @@ class CloudTranslator(
                         for (block in blocks) {
                             try {
                                 if (block.text.isNotBlank()) {
-                                    // Build translation options
+                                    // Build translation options with proper ISO 639-1 codes
                                     val options = mutableListOf<Translate.TranslateOption>(
-                                        Translate.TranslateOption.targetLanguage(toLang.code)
+                                        Translate.TranslateOption.targetLanguage(targetCode)
                                     )
 
                                     // Only include source language if not auto-detect
                                     if (fromLang != TextRecognizerLanguage.AUTO_DETECT) {
-                                        options.add(Translate.TranslateOption.sourceLanguage(fromLang.code))
+                                        options.add(Translate.TranslateOption.sourceLanguage(sourceCode))
                                     }
 
                                     val translation = translateService!!.translate(

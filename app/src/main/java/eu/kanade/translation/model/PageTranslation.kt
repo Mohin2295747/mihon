@@ -7,6 +7,7 @@ data class PageTranslation(
     var blocks: MutableList<TranslationBlock> = mutableListOf(),
     var imgWidth: Float = 0f,
     var imgHeight: Float = 0f,
+    var sourceLanguage: String = "auto", // Store source language for rendering optimizations
 ) {
     companion object {
         val EMPTY = PageTranslation()

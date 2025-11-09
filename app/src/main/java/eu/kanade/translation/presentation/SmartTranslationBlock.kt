@@ -36,10 +36,17 @@ fun SmartTranslationBlock(
     block: TranslationBlock,
     scaleFactor: Float,
     fontFamily: FontFamily,
-
+    sourceLanguage: String = "auto", // Language for padding optimization
 ) {
-    val padX = block.symWidth * 2
-    val padY = block.symHeight
+    // Language-specific padding multipliers to prevent text overlap
+    val paddingMultiplier = when (sourceLanguage) {
+        "ko", "korean" -> 1.5f // Korean needs more padding due to complex Hangul shapes
+        "ja", "japanese" -> 1.2f // Japanese with Kanji also benefits from extra padding
+        else -> 1.0f
+    }
+
+    val padX = (block.symWidth * 2) * paddingMultiplier
+    val padY = block.symHeight * paddingMultiplier
     val xPx = max((block.x - padX / 2) * scaleFactor, 0.0f)
     val yPx = max((block.y - padY / 2) * scaleFactor, 0.0f)
     val baseWidth = ((block.width + padX) * scaleFactor).pxToDp()

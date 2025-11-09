@@ -233,7 +233,8 @@ class ChapterTranslator(
                     val image = InputImage.fromFilePath(context, tmpFile.uri)
                     val result = textRecognizer.recognize(image)
                     val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
-                    val pageTranslation = convertToPageTranslation(blocks, image.width, image.height)
+                    val sourceLanguageCode = translation.fromLang.toCloudApiCode()
+                    val pageTranslation = convertToPageTranslation(blocks, image.width, image.height, sourceLanguageCode)
                     if (pageTranslation.blocks.isNotEmpty()) pages[fileName] = pageTranslation
                 }
             }
@@ -251,8 +252,17 @@ class ChapterTranslator(
         }
     }
 
-    private fun convertToPageTranslation(blocks: List<Text.TextBlock>, width: Int, height: Int): PageTranslation {
-        val translation = PageTranslation(imgWidth = width.toFloat(), imgHeight = height.toFloat())
+    private fun convertToPageTranslation(
+        blocks: List<Text.TextBlock>,
+        width: Int,
+        height: Int,
+        sourceLanguage: String = "auto"
+    ): PageTranslation {
+        val translation = PageTranslation(
+            imgWidth = width.toFloat(),
+            imgHeight = height.toFloat(),
+            sourceLanguage = sourceLanguage
+        )
         for (block in blocks) {
             val bounds = block.boundingBox!!
             val symBounds = block.lines.first().elements.first().symbols.first().boundingBox!!
