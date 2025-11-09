@@ -25,8 +25,18 @@ class CloudTranslator(
 
     private var translateService: Translate? = null
 
-    init {
-        if (apiKey.isNotBlank()) {
+    /**
+     * Lazily initialize the translation service on the IO thread.
+     * This prevents NetworkOnMainThreadException during object construction.
+     */
+    private suspend fun initializeServiceIfNeeded() = withContext(Dispatchers.IO) {
+        if (translateService == null) {
+            if (apiKey.isBlank()) {
+                val errorMsg = "CloudTranslator: API key is empty"
+                logcat(LogPriority.WARN) { errorMsg }
+                throw IllegalStateException("Google Cloud Translation API key is not configured. Please add your API key in Settings > Translation > Engine API Key.")
+            }
+
             try {
                 translateService = TranslateOptions.newBuilder()
                     .setApiKey(apiKey)
@@ -37,18 +47,14 @@ class CloudTranslator(
                 logcat(LogPriority.ERROR) {
                     "Failed to initialize CloudTranslator: ${e.message}\n${e.stackTraceToString()}"
                 }
+                throw IllegalStateException("Failed to initialize Google Cloud Translation API: ${e.message}. Please verify your API key and ensure the Translation API is enabled in Google Cloud Console with billing enabled.", e)
             }
-        } else {
-            logcat(LogPriority.WARN) { "CloudTranslator: API key is empty" }
         }
     }
 
     override suspend fun translate(pages: MutableMap<String, PageTranslation>) {
-        if (translateService == null) {
-            val errorMsg = "Google Cloud Translation API is not initialized. Please check your API key."
-            logcat(LogPriority.ERROR) { errorMsg }
-            throw IllegalStateException(errorMsg)
-        }
+        // Initialize service if needed (on IO thread)
+        initializeServiceIfNeeded()
 
         try {
             logcat { "Starting Cloud Translation: ${pages.size} pages, from ${fromLang.label} to ${toLang.label}" }
