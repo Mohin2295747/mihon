@@ -133,7 +133,14 @@ class CloudTranslator(
 
                                     // Decode HTML entities (&#39; -> ', &quot; -> ", etc.)
                                     val translatedText = translation.translatedText ?: block.text
-                                    block.translation = decodeHtmlEntities(translatedText)
+                                    val decodedText = decodeHtmlEntities(translatedText)
+
+                                    // Apply Korean-specific post-processing if source is Korean
+                                    block.translation = if (isKoreanSource(actualSourceCode, pageTranslation.sourceLanguage)) {
+                                        postProcessKoreanTranslation(decodedText)
+                                    } else {
+                                        decodedText
+                                    }
                                     translatedBlocks++
 
                                     // Log detected source language if Google Cloud did auto-detection
@@ -200,5 +207,61 @@ class CloudTranslator(
             }
             text // Fallback to original text
         }
+    }
+
+    /**
+     * Check if source language is Korean
+     */
+    private fun isKoreanSource(sourceCode: String?, detectedLanguage: String): Boolean {
+        return sourceCode == "ko" ||
+               detectedLanguage.lowercase() == "ko" ||
+               detectedLanguage.lowercase().contains("korean")
+    }
+
+    /**
+     * Post-process Korean-to-English translations to fix common issues
+     * Google Cloud Translation sometimes over-translates or mistranslates Korean particles
+     */
+    private fun postProcessKoreanTranslation(text: String): String {
+        var result = text
+
+        // Fix common over-translations of Korean particles
+        // Google Cloud sometimes translates particles that should be omitted in English
+        result = result.replace(Regex("\\s+of\\s+the\\s+"), " ")  // Redundant particles
+        result = result.replace(Regex("\\s{2,}"), " ")  // Multiple spaces to single space
+
+        // Fix common Korean romanization issues that Google Cloud mishandles
+        // Keep common Korean terms as-is instead of translating
+        val koreanTerms = mapOf(
+            "oppa" to "oppa",
+            "unni" to "unni",
+            "hyung" to "hyung",
+            "noona" to "noona",
+            "sunbae" to "sunbae",
+            "hubae" to "hubae",
+            "soju" to "soju",
+            "makgeolli" to "makgeolli",
+            "samgyeopsal" to "samgyeopsal"
+        )
+
+        // Case-insensitive replacement of mistranslations back to Korean terms
+        for ((korean, keep) in koreanTerms) {
+            result = result.replace(Regex("\\b(older brother|older sister|senior|junior|rice wine|pork belly)\\b", RegexOption.IGNORE_CASE)) {
+                when (it.value.lowercase()) {
+                    "older brother" -> if (result.contains("female", ignoreCase = true)) "unni" else "hyung"
+                    "older sister" -> if (result.contains("male", ignoreCase = true)) "noona" else "unni"
+                    "senior" -> "sunbae"
+                    "junior" -> "hubae"
+                    "rice wine" -> "soju"
+                    "pork belly" -> "samgyeopsal"
+                    else -> it.value
+                }
+            }
+        }
+
+        // Trim excess whitespace
+        result = result.trim()
+
+        return result
     }
 }

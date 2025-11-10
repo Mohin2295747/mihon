@@ -118,6 +118,7 @@ class PagerTranslationsView :
                 scaleFactor = zoomScale,
                 fontFamily = fontFamily,
                 sourceLanguage = translation.sourceLanguage,
+                targetLanguage = translation.targetLanguage,
             )
         }
     }

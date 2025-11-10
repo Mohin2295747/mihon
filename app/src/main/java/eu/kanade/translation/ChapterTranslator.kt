@@ -234,7 +234,8 @@ class ChapterTranslator(
                     val result = textRecognizer.recognize(image)
                     val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
                     val sourceLanguageCode = translation.fromLang.toCloudApiCode()
-                    val pageTranslation = convertToPageTranslation(blocks, image.width, image.height, sourceLanguageCode)
+                    val targetLanguageCode = translation.toLang.toCloudApiCode()
+                    val pageTranslation = convertToPageTranslation(blocks, image.width, image.height, sourceLanguageCode, targetLanguageCode)
                     if (pageTranslation.blocks.isNotEmpty()) pages[fileName] = pageTranslation
                 }
             }
@@ -256,7 +257,8 @@ class ChapterTranslator(
         blocks: List<Text.TextBlock>,
         width: Int,
         height: Int,
-        sourceLanguage: String = "auto"
+        sourceLanguage: String = "auto",
+        targetLanguage: String = "en"
     ): PageTranslation {
         // Detect actual language from recognized text blocks if AUTO is used
         val detectedLanguage = if (sourceLanguage == "auto" && blocks.isNotEmpty()) {
@@ -268,7 +270,8 @@ class ChapterTranslator(
         val translation = PageTranslation(
             imgWidth = width.toFloat(),
             imgHeight = height.toFloat(),
-            sourceLanguage = detectedLanguage
+            sourceLanguage = detectedLanguage,
+            targetLanguage = targetLanguage
         )
         for (block in blocks) {
             val bounds = block.boundingBox!!
@@ -286,8 +289,9 @@ class ChapterTranslator(
                 ),
             )
         }
-        // Smart merge overlapping text blocks
-        translation.blocks = smartMergeBlocks(translation.blocks, 50, 30, 30)
+        // Smart merge overlapping text blocks with language-specific thresholds
+        val (widthThresh, xThresh, yThresh) = getLanguageSpecificMergeThresholds(detectedLanguage)
+        translation.blocks = smartMergeBlocks(translation.blocks, widthThresh, xThresh, yThresh)
 
         return translation
     }
@@ -317,6 +321,32 @@ class ChapterTranslator(
             detectedLanguage.startsWith("es") -> "es" // Spanish
             detectedLanguage.startsWith("en") -> "en" // English
             else -> detectedLanguage.take(2).lowercase() // Take first 2 chars as fallback
+        }
+    }
+
+    /**
+     * Get language-specific text merging thresholds
+     * Korean text has different spacing patterns than Japanese/Chinese
+     * Returns (widthThreshold, xThreshold, yThreshold)
+     */
+    private fun getLanguageSpecificMergeThresholds(language: String): Triple<Int, Int, Int> {
+        return when {
+            // Korean needs larger thresholds due to spacing differences in Hangul
+            language == "ko" || language.lowercase().contains("korean") -> {
+                Triple(60, 35, 40)  // width=60, x=35, y=40 (vs default 50, 30, 30)
+            }
+            // Japanese with mixed Kanji/Hiragana
+            language == "ja" || language.lowercase().contains("japanese") -> {
+                Triple(50, 30, 30)  // Default values work well
+            }
+            // Chinese characters are more uniform
+            language == "zh" || language.lowercase().contains("chinese") -> {
+                Triple(45, 25, 28)  // Slightly tighter
+            }
+            // Default for other languages
+            else -> {
+                Triple(50, 30, 30)  // Default thresholds
+            }
         }
     }
 

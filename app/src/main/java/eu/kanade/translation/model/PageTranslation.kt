@@ -8,6 +8,7 @@ data class PageTranslation(
     var imgWidth: Float = 0f,
     var imgHeight: Float = 0f,
     var sourceLanguage: String = "auto", // Store source language for rendering optimizations
+    var targetLanguage: String = "en", // Store target language for translation pair optimizations
 ) {
     companion object {
         val EMPTY = PageTranslation()

@@ -30,13 +30,20 @@ private const val DEFAULT_FONT_SIZE = 16f
 private const val BUBBLE_EXPANSION_RATIO = 1.2f
 private const val MAX_BUBBLE_EXPANSION = 1.5f
 
+// Korean -> English specific constants
+private const val KOREAN_TO_ENGLISH_MIN_EXPANSION = 1.8f
+private const val KOREAN_TO_ENGLISH_MAX_EXPANSION = 2.5f
+private const val KOREAN_LINE_HEIGHT_MULTIPLIER = 1.7f
+private const val GENERIC_LINE_HEIGHT_MULTIPLIER = 1.5f
+
 @Composable
 fun SmartTranslationBlock(
     modifier: Modifier = Modifier,
     block: TranslationBlock,
     scaleFactor: Float,
     fontFamily: FontFamily,
-    sourceLanguage: String = "auto", // Language for padding optimization
+    sourceLanguage: String = "auto", // Source language detected by OCR
+    targetLanguage: String = "en", // Target language for translation
 ) {
     // Language-specific padding multipliers to prevent text overlap
     val paddingMultiplier = when (sourceLanguage) {
@@ -53,9 +60,19 @@ fun SmartTranslationBlock(
     val baseHeight = ((block.height + padY) * scaleFactor).pxToDp()
     val isVertical = block.angle > 85
 
+    // Detect Korean -> English translation pair
+    val isKoreanToEnglish = isKoreanToEnglishTranslation(sourceLanguage, targetLanguage)
+
     // Remember calculated dimensions to avoid recalculation
-    val calculatedDimensions = remember(block.translation) {
-        calculateOptimalDimensions(block.translation, baseWidth, baseHeight, fontFamily)
+    val calculatedDimensions = remember(block.translation, isKoreanToEnglish) {
+        calculateOptimalDimensions(
+            text = block.translation,
+            originalText = block.text,
+            baseWidth = baseWidth,
+            baseHeight = baseHeight,
+            fontFamily = fontFamily,
+            isKoreanToEnglish = isKoreanToEnglish
+        )
     }
 
     Box(
@@ -84,7 +101,7 @@ fun SmartTranslationBlock(
                         color = Color.Black,
                         overflow = TextOverflow.Clip,
                         textAlign = TextAlign.Center,
-                        maxLines = calculateMaxLines(maxHeightPx, mid),
+                        maxLines = calculateMaxLines(maxHeightPx, mid, isKoreanToEnglish),
                         softWrap = true,
                         modifier = Modifier
                             .width(calculatedDimensions.width)
@@ -113,7 +130,7 @@ fun SmartTranslationBlock(
                     softWrap = true,
                     overflow = TextOverflow.Clip,
                     textAlign = TextAlign.Center,
-                    maxLines = calculateMaxLines(maxHeightPx, bestSize),
+                    maxLines = calculateMaxLines(maxHeightPx, bestSize, isKoreanToEnglish),
                     modifier = Modifier
                         .width(calculatedDimensions.width)
                         .rotate(if (isVertical) 0f else block.angle)
@@ -130,13 +147,21 @@ fun SmartTranslationBlock(
 
 /**
  * Calculate optimal bubble dimensions with expansion if needed
+ * Includes special handling for Korean -> English translation
  */
 private fun calculateOptimalDimensions(
     text: String,
+    originalText: String,
     baseWidth: Dp,
     baseHeight: Dp,
     fontFamily: FontFamily,
+    isKoreanToEnglish: Boolean,
 ): BubbleDimensions {
+    // For Korean -> English, apply specialized expansion algorithm
+    if (isKoreanToEnglish) {
+        return calculateKoreanToEnglishDimensions(text, originalText, baseWidth, baseHeight)
+    }
+
     // For short text, use base dimensions
     if (text.length < 20) {
         return BubbleDimensions(baseWidth, baseHeight, 1.0f)
@@ -160,11 +185,66 @@ private fun calculateOptimalDimensions(
 }
 
 /**
- * Calculate maximum lines based on bubble height and font size
+ * Calculate bubble dimensions specifically for Korean -> English translation
+ * Korean text is extremely compact; English translations typically expand 1.8-2.5x
  */
-private fun calculateMaxLines(heightPx: Int, fontSize: Int): Int {
-    // Approximate line height as fontSize * 1.5 (typical line spacing)
-    val approximateLineHeight = fontSize * 1.5f
+private fun calculateKoreanToEnglishDimensions(
+    englishText: String,
+    koreanText: String,
+    baseWidth: Dp,
+    baseHeight: Dp,
+): BubbleDimensions {
+    // Calculate length ratio (English characters / Korean characters)
+    val lengthRatio = if (koreanText.isNotEmpty()) {
+        englishText.length.toFloat() / koreanText.length.toFloat()
+    } else {
+        2.0f // Default assumption
+    }
+
+    // Determine expansion ratio based on length ratio and absolute lengths
+    val expansionRatio = when {
+        // Very long translations need maximum expansion
+        englishText.length > 200 -> KOREAN_TO_ENGLISH_MAX_EXPANSION
+
+        // High length ratio (English much longer than Korean)
+        lengthRatio > 3.0f -> KOREAN_TO_ENGLISH_MAX_EXPANSION
+        lengthRatio > 2.0f -> KOREAN_TO_ENGLISH_MAX_EXPANSION * 0.9f
+
+        // Medium length text
+        englishText.length > 100 -> KOREAN_TO_ENGLISH_MIN_EXPANSION * 1.2f
+        englishText.length > 50 -> KOREAN_TO_ENGLISH_MIN_EXPANSION
+
+        // Short text (less aggressive expansion)
+        englishText.length < 20 -> 1.3f
+
+        // Default case
+        else -> KOREAN_TO_ENGLISH_MIN_EXPANSION
+    }.coerceAtMost(KOREAN_TO_ENGLISH_MAX_EXPANSION)
+
+    // Apply minimum width constraint for Korean->English to prevent narrow tall bubbles
+    val minWidthForKorean = baseWidth * 1.4f
+    val expandedWidth = (baseWidth * expansionRatio).coerceAtLeast(minWidthForKorean)
+
+    return BubbleDimensions(
+        width = expandedWidth,
+        height = baseHeight * expansionRatio,
+        expansionRatio = expansionRatio
+    )
+}
+
+/**
+ * Calculate maximum lines based on bubble height and font size
+ * Uses Korean-aware line height multiplier for better Hangul rendering
+ */
+private fun calculateMaxLines(heightPx: Int, fontSize: Int, isKoreanToEnglish: Boolean): Int {
+    // Korean Hangul requires slightly more line height due to vertical stacking of consonants/vowels
+    val lineHeightMultiplier = if (isKoreanToEnglish) {
+        KOREAN_LINE_HEIGHT_MULTIPLIER
+    } else {
+        GENERIC_LINE_HEIGHT_MULTIPLIER
+    }
+
+    val approximateLineHeight = fontSize * lineHeightMultiplier
     val maxLines = (heightPx / approximateLineHeight).toInt().coerceAtLeast(1)
     // Cap at reasonable maximum to prevent excessive lines
     return maxLines.coerceAtMost(20)
@@ -178,3 +258,12 @@ private data class BubbleDimensions(
     val height: Dp,
     val expansionRatio: Float
 )
+
+/**
+ * Detect if this is a Korean -> English translation pair
+ */
+private fun isKoreanToEnglishTranslation(sourceLanguage: String, targetLanguage: String): Boolean {
+    val isKoreanSource = sourceLanguage.lowercase() in listOf("ko", "korean", "kor")
+    val isEnglishTarget = targetLanguage.lowercase() in listOf("en", "english", "eng")
+    return isKoreanSource && isEnglishTarget
+}

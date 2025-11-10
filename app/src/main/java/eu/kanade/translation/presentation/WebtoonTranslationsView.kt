@@ -120,6 +120,7 @@ class WebtoonTranslationsView :
                 scaleFactor = scaleFactor,
                 fontFamily = fontFamily,
                 sourceLanguage = translation.sourceLanguage,
+                targetLanguage = translation.targetLanguage,
             )
         }
     }
