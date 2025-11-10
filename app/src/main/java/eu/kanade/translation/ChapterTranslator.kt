@@ -258,10 +258,17 @@ class ChapterTranslator(
         height: Int,
         sourceLanguage: String = "auto"
     ): PageTranslation {
+        // Detect actual language from recognized text blocks if AUTO is used
+        val detectedLanguage = if (sourceLanguage == "auto" && blocks.isNotEmpty()) {
+            detectLanguageFromBlocks(blocks)
+        } else {
+            sourceLanguage
+        }
+
         val translation = PageTranslation(
             imgWidth = width.toFloat(),
             imgHeight = height.toFloat(),
-            sourceLanguage = sourceLanguage
+            sourceLanguage = detectedLanguage
         )
         for (block in blocks) {
             val bounds = block.boundingBox!!
@@ -283,6 +290,34 @@ class ChapterTranslator(
         translation.blocks = smartMergeBlocks(translation.blocks, 50, 30, 30)
 
         return translation
+    }
+
+    /**
+     * Detect the most common language from MLKit recognized text blocks
+     * Returns ISO 639-1 language code (e.g., "ko" for Korean, "ja" for Japanese)
+     */
+    private fun detectLanguageFromBlocks(blocks: List<Text.TextBlock>): String {
+        // MLKit recognizedLanguage returns BCP-47 codes (e.g., "ko" for Korean)
+        val languageCounts = blocks
+            .mapNotNull { it.recognizedLanguage }
+            .groupingBy { it }
+            .eachCount()
+
+        // Get the most common language
+        val detectedLanguage = languageCounts.maxByOrNull { it.value }?.key ?: "auto"
+
+        logcat { "Detected language from text blocks: $detectedLanguage (counts: $languageCounts)" }
+
+        // BCP-47 codes are usually compatible with ISO 639-1, but ensure proper formatting
+        return when {
+            detectedLanguage.startsWith("ko") -> "ko" // Korean
+            detectedLanguage.startsWith("ja") -> "ja" // Japanese
+            detectedLanguage.startsWith("zh") -> "zh" // Chinese
+            detectedLanguage.startsWith("id") -> "id" // Indonesian
+            detectedLanguage.startsWith("es") -> "es" // Spanish
+            detectedLanguage.startsWith("en") -> "en" // English
+            else -> detectedLanguage.take(2).lowercase() // Take first 2 chars as fallback
+        }
     }
 
     private fun smartMergeBlocks(

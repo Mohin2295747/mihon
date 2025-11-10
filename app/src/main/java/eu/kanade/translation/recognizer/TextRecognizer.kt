@@ -17,6 +17,7 @@ class TextRecognizer(val language: TextRecognizerLanguage) : Closeable {
             TextRecognizerLanguage.AUTO_DETECT -> TextRecognizerOptions.DEFAULT_OPTIONS
             TextRecognizerLanguage.ENGLISH -> TextRecognizerOptions.DEFAULT_OPTIONS
             TextRecognizerLanguage.INDONESIAN -> TextRecognizerOptions.DEFAULT_OPTIONS
+            TextRecognizerLanguage.SPANISH -> TextRecognizerOptions.DEFAULT_OPTIONS
             TextRecognizerLanguage.CHINESE -> ChineseTextRecognizerOptions.Builder().build()
             TextRecognizerLanguage.JAPANESE -> JapaneseTextRecognizerOptions.Builder().build()
             TextRecognizerLanguage.KOREAN -> KoreanTextRecognizerOptions.Builder().build()
