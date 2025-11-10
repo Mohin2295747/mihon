@@ -16,4 +16,9 @@ class TranslationPreferences(
     fun translationEngineApiKey() = preferenceStore.getString("translation_engine_api_key", "")
     fun translationEngineTemperature() = preferenceStore.getString("translation_engine_temperature", "1")
     fun translationEngineMaxOutputTokens() = preferenceStore.getString("translation_engine_output_tokens", "8192")
+
+    // Language detection method for Google Cloud Translation AUTO mode
+    // "mlkit" = Use MLKit's OCR-based language detection (default)
+    // "google_cloud" = Use Google Cloud Translation's auto-detection
+    fun translationLanguageDetectionMethod() = preferenceStore.getString("translation_language_detection_method", "mlkit")
 }

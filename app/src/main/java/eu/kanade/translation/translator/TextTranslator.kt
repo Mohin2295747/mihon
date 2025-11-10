@@ -20,49 +20,17 @@ enum class TextTranslators(val label: String) {
     GEMINI("Gemini AI [API KEY]"),
     OPENROUTER("OpenRouter [API KEY]");
 
-    fun build(
-        pref: TranslationPreferences = Injekt.get(),
-        fromLang: TextRecognizerLanguage = TextRecognizerLanguage.fromPref(
-            pref.translateFromLanguage()
-        ),
-        toLang: TextTranslatorLanguage = TextTranslatorLanguage.fromPref(
-            pref.translateToLanguage()
-        )
-    ): TextTranslator {
-        val maxOutputTokens = pref.translationEngineMaxOutputTokens()
-            .get()
-            .toIntOrNull() ?: 8914
-        val temperature = pref.translationEngineTemperature()
-            .get()
-            .toFloatOrNull() ?: 1.0f
-        val modelName = pref.translationEngineModel().get()
-        val apiKey = pref.translationEngineApiKey().get()
-        
-        return when (this) {
+    fun build(pref : TranslationPreferences= Injekt.get(), fromLang: TextRecognizerLanguage = TextRecognizerLanguage.fromPref(pref.translateFromLanguage()), toLang: TextTranslatorLanguage = TextTranslatorLanguage.fromPref(pref.translateToLanguage())): TextTranslator{
+        val maxOutputTokens=pref.translationEngineMaxOutputTokens().get().toIntOrNull()?:8914
+        val temperature=pref.translationEngineTemperature().get().toFloatOrNull()?:1.0f
+        val modelName=pref.translationEngineModel().get()
+        val apiKey=pref.translationEngineApiKey().get()
+        val detectionMethod=pref.translationLanguageDetectionMethod().get()
+        return when(this){
             MLKIT -> MLKitTranslator(fromLang, toLang)
-<<<<<<< HEAD
-            GOOGLE -> GoogleTranslator(fromLang, toLang)
-            GEMINI -> GeminiTranslator(
-                fromLang, 
-                toLang, 
-                apiKey, 
-                modelName, 
-                maxOutputTokens, 
-                temperature
-            )
-            OPENROUTER -> OpenRouterTranslator(
-                fromLang, 
-                toLang, 
-                apiKey, 
-                modelName, 
-                maxOutputTokens, 
-                temperature
-            )
-=======
-            CLOUD_TRANSLATE -> CloudTranslator(fromLang, toLang, apiKey)
+            CLOUD_TRANSLATE -> CloudTranslator(fromLang, toLang, apiKey, detectionMethod)
             GEMINI -> GeminiTranslator(fromLang, toLang,apiKey,modelName,maxOutputTokens,temperature)
             OPENROUTER -> OpenRouterTranslator(fromLang, toLang,apiKey,modelName,maxOutputTokens,temperature)
->>>>>>> 029632052 (Upgrade translation system with Gemini 2.5 Flash and Google Cloud Translation API)
         }
     }
 

@@ -22,6 +22,7 @@ class CloudTranslator(
     override val fromLang: TextRecognizerLanguage,
     override val toLang: TextTranslatorLanguage,
     private val apiKey: String,
+    private val detectionMethod: String = "mlkit",
 ) : TextTranslator {
 
     private var translateService: Translate? = null
@@ -64,6 +65,7 @@ class CloudTranslator(
 
             logcat { "Starting Cloud Translation: ${pages.size} pages" }
             logcat { "Languages: ${fromLang.label} ($sourceCode) -> ${toLang.label} ($targetCode)" }
+            logcat { "Detection Method: $detectionMethod ${if (fromLang == TextRecognizerLanguage.AUTO_DETECT) "(active for AUTO mode)" else "(not used - explicit language selected)"}" }
 
             withContext(Dispatchers.IO) {
                 var totalBlocks = 0
@@ -76,15 +78,33 @@ class CloudTranslator(
                         totalBlocks += blocks.size
 
                         // Determine actual source language for this page
-                        // If AUTO was selected, use MLKit's detected language from text recognition
-                        // This is more accurate than Google Cloud's auto-detection
+                        // Detection method is configurable via user preference
                         val actualSourceCode = if (fromLang == TextRecognizerLanguage.AUTO_DETECT) {
-                            if (pageTranslation.sourceLanguage != "auto") {
-                                logcat { "AUTO mode: Using MLKit detected language '${pageTranslation.sourceLanguage}' for page $pageKey" }
-                                pageTranslation.sourceLanguage
-                            } else {
-                                logcat { "AUTO mode: No language detected by MLKit, omitting source language for page $pageKey" }
-                                null // Let Google Cloud API detect
+                            when (detectionMethod) {
+                                "mlkit" -> {
+                                    // Use MLKit's OCR-based language detection (more accurate for visual text)
+                                    if (pageTranslation.sourceLanguage != "auto") {
+                                        logcat { "AUTO mode (MLKit): Using MLKit detected language '${pageTranslation.sourceLanguage}' for page $pageKey" }
+                                        pageTranslation.sourceLanguage
+                                    } else {
+                                        logcat { "AUTO mode (MLKit): No language detected by MLKit, falling back to Google Cloud detection for page $pageKey" }
+                                        null // Let Google Cloud API detect as fallback
+                                    }
+                                }
+                                "google_cloud" -> {
+                                    // Use Google Cloud's auto-detection (better for some languages like Indonesian/Spanish)
+                                    logcat { "AUTO mode (Google Cloud): Using Google Cloud auto-detection for page $pageKey" }
+                                    null // Let Google Cloud API detect
+                                }
+                                else -> {
+                                    // Unknown method, fall back to MLKit
+                                    logcat(LogPriority.WARN) { "Unknown detection method '$detectionMethod', falling back to MLKit" }
+                                    if (pageTranslation.sourceLanguage != "auto") {
+                                        pageTranslation.sourceLanguage
+                                    } else {
+                                        null
+                                    }
+                                }
                             }
                         } else {
                             sourceCode // Use explicitly selected language
@@ -115,6 +135,12 @@ class CloudTranslator(
                                     val translatedText = translation.translatedText ?: block.text
                                     block.translation = decodeHtmlEntities(translatedText)
                                     translatedBlocks++
+
+                                    // Log detected source language if Google Cloud did auto-detection
+                                    val detectedLang = translation.sourceLanguage
+                                    if (actualSourceCode == null && detectedLang != null) {
+                                        logcat { "Google Cloud detected source language: $detectedLang for block in page $pageKey" }
+                                    }
 
                                     logcat { "Translated block: '${block.text.take(30)}...' -> '${block.translation.take(30)}...'" }
                                 } else {

@@ -63,6 +63,10 @@ object SettingsTranslationScreen : SearchableSettings {
         translationPreferences: TranslationPreferences,
     ): Preference.PreferenceGroup {
         val engines = TextTranslators.entries
+        val detectionMethods = mapOf(
+            "mlkit" to "MLKit Detection (Default)",
+            "google_cloud" to "Google Cloud Auto-Detection"
+        )
         return Preference.PreferenceGroup(
             title = stringResource(ATMR.strings.pref_group_engine),
             preferenceItems = persistentListOf(
@@ -75,6 +79,12 @@ object SettingsTranslationScreen : SearchableSettings {
                     pref = translationPreferences.translationEngineApiKey(),
                     subtitle = stringResource(ATMR.strings.pref_sub_engine_api_key),
                     title = stringResource(ATMR.strings.pref_engine_api_key),
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    pref = translationPreferences.translationLanguageDetectionMethod(),
+                    title = "Language Detection Method",
+                    subtitle = "For Google Cloud Translation AUTO mode",
+                    entries = detectionMethods.toImmutableMap(),
                 ),
             ),
         )
