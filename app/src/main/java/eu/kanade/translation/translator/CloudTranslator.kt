@@ -75,7 +75,22 @@ class CloudTranslator(
                         val blocks = pageTranslation.blocks
                         totalBlocks += blocks.size
 
-                        logcat { "Translating page $pageKey: ${blocks.size} blocks" }
+                        // Determine actual source language for this page
+                        // If AUTO was selected, use MLKit's detected language from text recognition
+                        // This is more accurate than Google Cloud's auto-detection
+                        val actualSourceCode = if (fromLang == TextRecognizerLanguage.AUTO_DETECT) {
+                            if (pageTranslation.sourceLanguage != "auto") {
+                                logcat { "AUTO mode: Using MLKit detected language '${pageTranslation.sourceLanguage}' for page $pageKey" }
+                                pageTranslation.sourceLanguage
+                            } else {
+                                logcat { "AUTO mode: No language detected by MLKit, omitting source language for page $pageKey" }
+                                null // Let Google Cloud API detect
+                            }
+                        } else {
+                            sourceCode // Use explicitly selected language
+                        }
+
+                        logcat { "Translating page $pageKey: ${blocks.size} blocks, source: ${actualSourceCode ?: "auto-detect"}" }
 
                         // Translate each block
                         for (block in blocks) {
@@ -86,9 +101,9 @@ class CloudTranslator(
                                         Translate.TranslateOption.targetLanguage(targetCode)
                                     )
 
-                                    // Only include source language if not auto-detect
-                                    if (fromLang != TextRecognizerLanguage.AUTO_DETECT) {
-                                        options.add(Translate.TranslateOption.sourceLanguage(sourceCode))
+                                    // Include source language if we have one (explicit or detected)
+                                    if (actualSourceCode != null) {
+                                        options.add(Translate.TranslateOption.sourceLanguage(actualSourceCode))
                                     }
 
                                     val translation = translateService!!.translate(
