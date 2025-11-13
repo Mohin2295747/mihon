@@ -13,6 +13,7 @@ import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.TranslatorOptions
 import eu.kanade.translation.model.PageTranslation
 import eu.kanade.translation.recognizer.TextRecognizerLanguage
+import kotlinx.coroutines.delay
 import logcat.LogPriority
 import logcat.logcat
 import org.json.JSONObject
@@ -36,7 +37,6 @@ class GeminiTranslator(
             topP = 0.5f
             temperature = temp
             maxOutputTokens = maxOutputToken
-            responseMimeType = "application/json"
         },
         safetySettings = listOf(
             SafetySetting(HarmCategory.HARASSMENT, BlockThreshold.NONE),
@@ -65,13 +65,101 @@ class GeminiTranslator(
             logcat { "GeminiTranslator: Sending ${pages.size} pages with ${data.values.sumOf { it.size }} blocks to API" }
             logcat(LogPriority.DEBUG) { "GeminiTranslator: Request JSON: ${json.toString().take(200)}..." }
 
-            val response = model.generateContent(json.toString())
+            // Retry logic with exponential backoff for transient failures
+            val maxRetries = 3
+            var lastException: Exception? = null
+            var response: com.google.ai.client.generativeai.type.GenerateContentResponse? = null
+
+            for (attempt in 1..maxRetries) {
+                try {
+                    logcat { "GeminiTranslator: API call attempt $attempt/$maxRetries" }
+                    response = model.generateContent(json.toString())
+                    break // Success, exit retry loop
+                } catch (e: Exception) {
+                    lastException = e
+                    val errorMessage = e.message ?: "Unknown error"
+
+                    // Check if error is retryable (empty response, EOF, server errors)
+                    val isRetryable = errorMessage.contains("EOF") ||
+                        errorMessage.contains("empty") ||
+                        errorMessage.contains("ServerException") ||
+                        errorMessage.contains("timeout", ignoreCase = true) ||
+                        errorMessage.contains("connection", ignoreCase = true)
+
+                    logcat(LogPriority.WARN) {
+                        "GeminiTranslator: Attempt $attempt/$maxRetries failed: $errorMessage" +
+                            (if (isRetryable) " (retryable)" else " (non-retryable)")
+                    }
+
+                    if (!isRetryable || attempt == maxRetries) {
+                        // Non-retryable error or last attempt - throw immediately
+                        throw e
+                    }
+
+                    // Exponential backoff: 1s, 2s, 3s
+                    val delayMs = attempt * 1000L
+                    logcat { "GeminiTranslator: Retrying after ${delayMs}ms delay..." }
+                    delay(delayMs)
+                }
+            }
+
+            if (response == null) {
+                throw lastException ?: Exception("Translation failed after $maxRetries attempts with unknown error")
+            }
 
             logcat { "GeminiTranslator: Received response from Gemini API" }
 
-            // Validate response
-            if (response.text == null || response.text!!.isBlank()) {
-                throw Exception("Gemini API returned empty response. This may indicate API quota exceeded or invalid request.")
+            // Enhanced response validation to prevent JSON EOF errors
+            when {
+                response.text == null -> {
+                    val candidatesCount = response.candidates?.size ?: 0
+                    val finishReason = response.candidates?.firstOrNull()?.finishReason?.toString() ?: "unknown"
+                    val promptFeedback = response.promptFeedback?.toString() ?: "none"
+
+                    logcat(LogPriority.ERROR) {
+                        "GeminiTranslator: Response text is NULL\n" +
+                            "Candidates: $candidatesCount\n" +
+                            "FinishReason: $finishReason\n" +
+                            "PromptFeedback: $promptFeedback"
+                    }
+                    throw Exception(
+                        "Gemini API returned null response. " +
+                            "This may indicate content filtering (FinishReason: $finishReason), " +
+                            "API quota limits, or model errors. " +
+                            "Check your API key and quota at https://makersuite.google.com"
+                    )
+                }
+
+                response.text!!.isBlank() -> {
+                    val finishReason = response.candidates?.firstOrNull()?.finishReason?.toString() ?: "unknown"
+                    val safetyRatings = response.candidates?.firstOrNull()?.safetyRatings?.joinToString {
+                        "${it.category}: ${it.probability}"
+                    } ?: "none"
+
+                    logcat(LogPriority.ERROR) {
+                        "GeminiTranslator: Response text is EMPTY\n" +
+                            "FinishReason: $finishReason\n" +
+                            "SafetyRatings: $safetyRatings"
+                    }
+                    throw Exception(
+                        "Gemini API returned empty response. " +
+                            "FinishReason: $finishReason. " +
+                            "This may indicate safety filtering, quota exceeded, or model timeout. " +
+                            "If using gemini-2.5-flash, try removing responseMimeType or use a different model."
+                    )
+                }
+
+                !response.text!!.trim().startsWith("{") -> {
+                    logcat(LogPriority.ERROR) {
+                        "GeminiTranslator: Response is not valid JSON\n" +
+                            "First 200 chars: ${response.text!!.take(200)}"
+                    }
+                    throw Exception(
+                        "Gemini API did not return JSON. " +
+                            "Response starts with: '${response.text!!.take(50)}...'. " +
+                            "The model may not be following the system prompt correctly."
+                    )
+                }
             }
 
             logcat(LogPriority.DEBUG) { "GeminiTranslator: Response text: ${response.text!!.take(200)}..." }
@@ -138,6 +226,8 @@ class GeminiTranslator(
     private fun getKoreanToEnglishSystemPrompt(): String {
         return """
 ## System Prompt for Korean Manhwa Translation (Korean → English)
+
+**IMPORTANT: You MUST respond with ONLY valid JSON. Do not include any text before or after the JSON object.**
 
 You are a highly skilled AI specialized in translating Korean manhwa (웹툰/만화) to English while preserving the original emotional impact, cultural nuances, and dramatic tone characteristic of Korean comics.
 
@@ -235,8 +325,9 @@ You are a highly skilled AI specialized in translating Korean manhwa (웹툰/만
 * Respect Korean cultural context while making it accessible to English readers
 * Remove all watermarks and credits meticulously
 * Ensure the output JSON structure perfectly mirrors the input structure
+* Your response must be valid JSON starting with '{' and ending with '}'
 
-Return {[key:string]:Array<String>}
+Return ONLY the JSON object with structure: {[key:string]:Array<String>}
         """.trimIndent()
     }
 
@@ -246,6 +337,8 @@ Return {[key:string]:Array<String>}
     private fun getGenericSystemPrompt(targetLanguage: String): String {
         return """
 ## System Prompt for Manhwa/Manga/Manhua Translation
+
+**IMPORTANT: You MUST respond with ONLY valid JSON. Do not include any text before or after the JSON object.**
 
 You are a highly skilled AI tasked with translating text from scanned images of comics (manhwa, manga, manhua) while preserving the original structure and removing any watermarks or site links.
 
@@ -278,8 +371,9 @@ You are a highly skilled AI tasked with translating text from scanned images of 
 * Prioritize accurate and natural-sounding translations.
 * Be meticulous in removing all watermarks and site links.
 * Ensure the output JSON structure perfectly mirrors the input structure.
+* Your response must be valid JSON starting with '{' and ending with '}'
 
-Return {[key:string]:Array<String>}
+Return ONLY the JSON object with structure: {[key:string]:Array<String>}
         """.trimIndent()
     }
 
