@@ -27,6 +27,7 @@ import kotlin.math.max
 // Smart bubble sizing constants
 private const val MIN_FONT_SIZE = 12f
 private const val DEFAULT_FONT_SIZE = 16f
+private const val CJK_MAX_FONT_SIZE = 12f // Cap for Korean/Japanese/Chinese translations to prevent oversized fonts
 private const val BUBBLE_EXPANSION_RATIO = 1.2f
 private const val MAX_BUBBLE_EXPANSION = 1.5f
 
@@ -47,7 +48,7 @@ fun SmartTranslationBlock(
 ) {
     // Language-specific padding multipliers to prevent text overlap
     val paddingMultiplier = when (sourceLanguage) {
-        "ko", "korean" -> 1.5f // Korean needs more padding due to complex Hangul shapes
+        "ko", "korean" -> 1.15f // Reduced from 1.5f to prevent oversized bubbles and fonts
         "ja", "japanese" -> 1.2f // Japanese with Kanji also benefits from extra padding
         else -> 1.0f
     }
@@ -87,8 +88,10 @@ fun SmartTranslationBlock(
             val maxHeightPx = with(density) { calculatedDimensions.height.roundToPx() }
 
             // Binary search for optimal font size with minimum threshold
+            // Cap maximum font size for CJK languages to prevent oversized fonts
+            val isCJKLanguage = sourceLanguage.lowercase() in listOf("ko", "korean", "ja", "japanese", "zh", "chinese")
             var low = MIN_FONT_SIZE.toInt()
-            var high = 100 // Initial upper bound
+            var high = if (isCJKLanguage) CJK_MAX_FONT_SIZE.toInt() else 100
             var bestSize = low
 
             while (low <= high) {
