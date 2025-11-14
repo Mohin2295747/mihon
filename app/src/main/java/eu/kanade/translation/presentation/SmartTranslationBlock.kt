@@ -55,8 +55,8 @@ fun SmartTranslationBlock(
 
     val padX = (block.symWidth * 2) * paddingMultiplier
     val padY = block.symHeight * paddingMultiplier
-    val xPx = max((block.x - padX / 2) * scaleFactor, 0.0f)
-    val yPx = max((block.y - padY / 2) * scaleFactor, 0.0f)
+    val baseXPx = max((block.x - padX / 2) * scaleFactor, 0.0f)
+    val baseYPx = max((block.y - padY / 2) * scaleFactor, 0.0f)
     val baseWidth = ((block.width + padX) * scaleFactor).pxToDp()
     val baseHeight = ((block.height + padY) * scaleFactor).pxToDp()
     val isVertical = block.angle > 85
@@ -76,13 +76,20 @@ fun SmartTranslationBlock(
         )
     }
 
+    // Center the text container when dimensions are expanded
+    // Calculate offset to center the expanded box over the original bubble position
+    val density = LocalDensity.current
+    val widthExpansionPx = with(density) { (calculatedDimensions.width - baseWidth).toPx() }
+    val heightExpansionPx = with(density) { (calculatedDimensions.height - baseHeight).toPx() }
+    val xPx = max(baseXPx - (widthExpansionPx / 2), 0.0f)
+    val yPx = max(baseYPx - (heightExpansionPx / 2), 0.0f)
+
     Box(
         modifier = modifier
             .wrapContentSize(Alignment.CenterStart, true)
             .offset(xPx.pxToDp(), yPx.pxToDp())
             .requiredSize(calculatedDimensions.width, calculatedDimensions.height),
     ) {
-        val density = LocalDensity.current
         SubcomposeLayout { constraints ->
             val maxWidthPx = with(density) { calculatedDimensions.width.roundToPx() }
             val maxHeightPx = with(density) { calculatedDimensions.height.roundToPx() }
