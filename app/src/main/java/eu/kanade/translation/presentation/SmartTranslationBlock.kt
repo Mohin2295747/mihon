@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.translation.model.BubbleShape
 import eu.kanade.translation.model.TranslationBlock
 import kotlin.math.max
 
@@ -33,10 +34,24 @@ private const val BUBBLE_EXPANSION_RATIO = 1.2f
 private const val MAX_BUBBLE_EXPANSION = 1.5f
 
 // Edge padding to prevent text touching bubble boundaries
-private const val HORIZONTAL_PADDING_DP = 8 // Left/right inset in dp
-private const val VERTICAL_PADDING_DP = 4 // Top/bottom inset in dp (reduced from 6 to allow more vertical space)
-private const val WIDTH_SAFETY_MARGIN = 0.95f // Use 95% of available width (conservative for horizontal fit)
-private const val HEIGHT_SAFETY_MARGIN = 0.98f // Use 98% of available height (less conservative to utilize vertical space)
+// Different padding for different bubble shapes
+private const val HORIZONTAL_PADDING_DP = 8 // Left/right inset for rectangles
+private const val VERTICAL_PADDING_DP = 2 // Top/bottom inset for rectangles (reduced for better vertical space)
+private const val OVAL_VERTICAL_PADDING_DP = 10 // Increased vertical padding for horizontal ovals to avoid curved edges
+private const val OVAL_HORIZONTAL_PADDING_DP = 4 // Reduced horizontal padding for vertical ovals
+
+// Safety margins for text area calculation
+// Rectangles: Use most of available space
+private const val WIDTH_SAFETY_MARGIN = 0.95f // Use 95% of available width
+private const val HEIGHT_SAFETY_MARGIN = 0.99f // Use 99% of available height (increased from 0.98 for rectangles)
+
+// Horizontal ovals (Korean common case): Reduce vertical area to avoid curved top/bottom edges
+private const val OVAL_WIDTH_SAFETY_MARGIN = 0.95f // Keep 95% width (curves are at top/bottom, not sides)
+private const val OVAL_HEIGHT_SAFETY_MARGIN = 0.70f // Use only 70% of height (avoid top/bottom curves) - CRITICAL for Korean ovals
+
+// Vertical ovals: Reduce horizontal area to avoid curved left/right edges
+private const val VERTICAL_OVAL_WIDTH_SAFETY_MARGIN = 0.70f // Use only 70% width (avoid left/right curves)
+private const val VERTICAL_OVAL_HEIGHT_SAFETY_MARGIN = 0.95f // Keep 95% height
 
 // Korean -> English specific constants
 private const val KOREAN_TO_ENGLISH_MIN_EXPANSION = 1.8f
@@ -48,6 +63,16 @@ private const val GENERIC_LINE_HEIGHT_MULTIPLIER = 1.3f // Reduced from 1.5f for
 private const val CLOUD_KOREAN_TO_ENGLISH_MIN_EXPANSION = 2.2f
 private const val CLOUD_KOREAN_TO_ENGLISH_MAX_EXPANSION = 3.0f
 private const val CLOUD_TRANSLATION_EXPANSION_MULTIPLIER = 1.15f
+
+/**
+ * Helper data class for shape-specific padding and margin configurations
+ */
+private data class Quadruple<out A, out B, out C, out D>(
+    val first: A,
+    val second: B,
+    val third: C,
+    val fourth: D
+)
 
 @Composable
 fun SmartTranslationBlock(
@@ -98,20 +123,60 @@ fun SmartTranslationBlock(
     ) {
         val density = LocalDensity.current
         SubcomposeLayout { constraints ->
-            // Apply edge padding to prevent text touching bubble edges
-            val horizontalPaddingPx = with(density) { (HORIZONTAL_PADDING_DP.dp).roundToPx() }
-            val verticalPaddingPx = with(density) { (VERTICAL_PADDING_DP.dp).roundToPx() }
+            // Detect bubble shape for adaptive text constraints
+            val bubbleShape = block.detectShape()
 
-            // Calculate available text area with padding and safety margin
-            // Use separate safety margins for width (conservative) and height (aggressive) to utilize vertical space
+            // Apply shape-specific padding and safety margins
+            // Horizontal ovals (Korean common): More vertical padding, reduce vertical area to avoid curves
+            // Vertical ovals: More horizontal padding, reduce horizontal area
+            // Rectangles/Squares: Standard padding, maximize space usage
+            val (horizontalPaddingDp, verticalPaddingDp, widthMargin, heightMargin) = when (bubbleShape) {
+                BubbleShape.HORIZONTAL_OVAL -> {
+                    // Korean horizontal oval bubbles - CRITICAL CASE
+                    // Text gets cut off at curved top/bottom edges
+                    // Solution: Use only middle 70% of height, increase vertical padding
+                    Quadruple(
+                        HORIZONTAL_PADDING_DP,        // 8dp horizontal
+                        OVAL_VERTICAL_PADDING_DP,     // 10dp vertical (increased to avoid curves)
+                        OVAL_WIDTH_SAFETY_MARGIN,     // 95% width (keep full width)
+                        OVAL_HEIGHT_SAFETY_MARGIN     // 70% height (avoid curves!) - KEY FIX
+                    )
+                }
+                BubbleShape.VERTICAL_OVAL -> {
+                    // Vertical oval bubbles - less common
+                    // Text gets cut off at curved left/right edges
+                    Quadruple(
+                        OVAL_HORIZONTAL_PADDING_DP,          // 4dp horizontal
+                        VERTICAL_PADDING_DP,                 // 2dp vertical
+                        VERTICAL_OVAL_WIDTH_SAFETY_MARGIN,   // 70% width (avoid curves)
+                        VERTICAL_OVAL_HEIGHT_SAFETY_MARGIN   // 95% height
+                    )
+                }
+                else -> {
+                    // Rectangles and squares - standard case
+                    // Maximize vertical space usage for better text fit
+                    Quadruple(
+                        HORIZONTAL_PADDING_DP,  // 8dp horizontal
+                        VERTICAL_PADDING_DP,    // 2dp vertical (reduced for max space)
+                        WIDTH_SAFETY_MARGIN,    // 95% width
+                        HEIGHT_SAFETY_MARGIN    // 99% height (maximized for rectangles)
+                    )
+                }
+            }
+
+            // Apply edge padding to prevent text touching bubble edges
+            val horizontalPaddingPx = with(density) { (horizontalPaddingDp.dp).roundToPx() }
+            val verticalPaddingPx = with(density) { (verticalPaddingDp.dp).roundToPx() }
+
+            // Calculate available text area with shape-aware padding and safety margins
             val totalHorizontalPadding = horizontalPaddingPx * 2
             val totalVerticalPadding = verticalPaddingPx * 2
 
             val maxWidthPx = with(density) {
-                ((calculatedDimensions.width.roundToPx() - totalHorizontalPadding) * WIDTH_SAFETY_MARGIN).toInt()
+                ((calculatedDimensions.width.roundToPx() - totalHorizontalPadding) * widthMargin).toInt()
             }
             val maxHeightPx = with(density) {
-                ((calculatedDimensions.height.roundToPx() - totalVerticalPadding) * HEIGHT_SAFETY_MARGIN).toInt()
+                ((calculatedDimensions.height.roundToPx() - totalVerticalPadding) * heightMargin).toInt()
             }
 
             // Calculate actual constrained width for text layout (with padding applied)

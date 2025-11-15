@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.toFontFamily
 import androidx.compose.ui.unit.dp
 import androidx.core.view.isVisible
 import eu.kanade.translation.data.TranslationFont
+import eu.kanade.translation.model.BubbleShape
 import eu.kanade.translation.model.PageTranslation
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -99,13 +100,25 @@ class PagerTranslationsView :
             val bgWidth = (block.width + padX) * zoomScale
             val bgHeight = (block.height + padY) * zoomScale
             val isVertical = block.angle > 85
+
+            // Detect bubble shape for adaptive background rendering
+            // Horizontal ovals (Korean common): Use high corner radius (50%) for elliptical appearance
+            // Vertical ovals: Use high corner radius for elliptical appearance
+            // Rectangles/Squares: Use moderate corner radius
+            val backgroundShape = when (block.detectShape()) {
+                BubbleShape.HORIZONTAL_OVAL -> RoundedCornerShape(percent = 50) // Elliptical (Korean case)
+                BubbleShape.VERTICAL_OVAL -> RoundedCornerShape(percent = 50)   // Elliptical
+                BubbleShape.SQUARE -> RoundedCornerShape(8.dp)                  // More rounded square
+                else -> RoundedCornerShape(6.dp)                                // Slightly rounded rectangles
+            }
+
             Box(
                 modifier = Modifier
                     .wrapContentSize(Alignment.CenterStart, true)
                     .offset(bgX.pxToDp(), bgY.pxToDp())
                     .requiredSize(bgWidth.pxToDp(), bgHeight.pxToDp())
                     .rotate(if (isVertical) 0f else block.angle)
-                    .background(Color.White, shape = RoundedCornerShape(4.dp)),
+                    .background(Color.White, shape = backgroundShape),
             )
         }
     }
