@@ -86,50 +86,24 @@ class PagerTranslationsView :
     fun TextBlockBackground(zoomScale: Float) {
         // Language-specific padding multipliers to prevent text overlap
         val paddingMultiplier = when (translation.sourceLanguage) {
-            "ko", "korean" -> 1.15f // Reduced from 1.5f to match SmartTranslationBlock
+            "ko", "korean" -> 1.5f // Korean needs more padding due to complex Hangul shapes
             "ja", "japanese" -> 1.2f // Japanese with Kanji also benefits from extra padding
             else -> 1.0f
         }
 
-        // Detect Korean -> English translation for moderate expansion
-        val isKoreanToEnglish = (translation.sourceLanguage.lowercase() in listOf("ko", "korean", "kor")) &&
-            (translation.targetLanguage.lowercase() in listOf("en", "english", "eng"))
-
         translation.blocks.forEach { block ->
             val padX = (block.symWidth / 2) * paddingMultiplier
             val padY = (block.symHeight / 2) * paddingMultiplier
-            val baseBgX = ((block.x - padX / 2) * 1) * zoomScale
-            val baseBgY = ((block.y - padY / 2) * 1) * zoomScale
-            val baseBgWidth = (block.width + padX) * zoomScale
-            val baseBgHeight = (block.height + padY) * zoomScale
-
-            // Apply moderate expansion for Korean -> English (hybrid approach)
-            val expansionRatio = if (isKoreanToEnglish) {
-                // Moderate expansion: 1.2x-1.5x based on translation length
-                when {
-                    block.translation.length > 100 -> 1.5f
-                    block.translation.length > 50 -> 1.35f
-                    else -> 1.2f
-                }
-            } else {
-                1.0f
-            }
-
-            val expandedWidth = baseBgWidth * expansionRatio
-            val expandedHeight = baseBgHeight * expansionRatio
-
-            // Center the expanded whitewash over the original bubble position
-            val widthExpansion = expandedWidth - baseBgWidth
-            val heightExpansion = expandedHeight - baseBgHeight
-            val bgX = baseBgX - (widthExpansion / 2)
-            val bgY = baseBgY - (heightExpansion / 2)
-
+            val bgX = ((block.x - padX / 2) * 1) * zoomScale
+            val bgY = ((block.y - padY / 2) * 1) * zoomScale
+            val bgWidth = (block.width + padX) * zoomScale
+            val bgHeight = (block.height + padY) * zoomScale
             val isVertical = block.angle > 85
             Box(
                 modifier = Modifier
                     .wrapContentSize(Alignment.CenterStart, true)
                     .offset(bgX.pxToDp(), bgY.pxToDp())
-                    .requiredSize(expandedWidth.pxToDp(), expandedHeight.pxToDp())
+                    .requiredSize(bgWidth.pxToDp(), bgHeight.pxToDp())
                     .rotate(if (isVertical) 0f else block.angle)
                     .background(Color.White, shape = RoundedCornerShape(4.dp)),
             )
@@ -145,6 +119,7 @@ class PagerTranslationsView :
                 fontFamily = fontFamily,
                 sourceLanguage = translation.sourceLanguage,
                 targetLanguage = translation.targetLanguage,
+                translatorType = translation.translatorType,
             )
         }
     }

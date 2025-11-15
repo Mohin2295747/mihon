@@ -74,6 +74,9 @@ class CloudTranslator(
 
                 for ((pageKey, pageTranslation) in pages) {
                     try {
+                        // Set translator type for rendering optimizations
+                        pageTranslation.translatorType = "cloud"
+
                         val blocks = pageTranslation.blocks
                         totalBlocks += blocks.size
 

@@ -175,6 +175,9 @@ class GeminiTranslator(
             var removedWatermarks = 0
 
             for ((k, v) in pages) {
+                // Set translator type for rendering optimizations
+                v.translatorType = "gemini"
+
                 totalBlocks += v.blocks.size
                 v.blocks.forEachIndexed { i, b ->
                     run {

@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.translation.model.TranslationBlock
 import kotlin.math.max
@@ -31,11 +32,21 @@ private const val CJK_MAX_FONT_SIZE = 12f // Cap for Korean/Japanese/Chinese tra
 private const val BUBBLE_EXPANSION_RATIO = 1.2f
 private const val MAX_BUBBLE_EXPANSION = 1.5f
 
+// Edge padding to prevent text touching bubble boundaries
+private const val HORIZONTAL_PADDING_DP = 8 // Left/right inset in dp
+private const val VERTICAL_PADDING_DP = 6 // Top/bottom inset in dp
+private const val TEXT_AREA_SAFETY_MARGIN = 0.95f // Use 95% of available space
+
 // Korean -> English specific constants
 private const val KOREAN_TO_ENGLISH_MIN_EXPANSION = 1.8f
 private const val KOREAN_TO_ENGLISH_MAX_EXPANSION = 2.5f
 private const val KOREAN_LINE_HEIGHT_MULTIPLIER = 1.7f
 private const val GENERIC_LINE_HEIGHT_MULTIPLIER = 1.5f
+
+// Cloud Translation specific constants (longer translations)
+private const val CLOUD_KOREAN_TO_ENGLISH_MIN_EXPANSION = 2.2f
+private const val CLOUD_KOREAN_TO_ENGLISH_MAX_EXPANSION = 3.0f
+private const val CLOUD_TRANSLATION_EXPANSION_MULTIPLIER = 1.15f
 
 @Composable
 fun SmartTranslationBlock(
@@ -45,6 +56,7 @@ fun SmartTranslationBlock(
     fontFamily: FontFamily,
     sourceLanguage: String = "auto", // Source language detected by OCR
     targetLanguage: String = "en", // Target language for translation
+    translatorType: String = "gemini", // Translator engine type (cloud, gemini, etc.)
 ) {
     // Language-specific padding multipliers to prevent text overlap
     val paddingMultiplier = when (sourceLanguage) {
@@ -55,8 +67,8 @@ fun SmartTranslationBlock(
 
     val padX = (block.symWidth * 2) * paddingMultiplier
     val padY = block.symHeight * paddingMultiplier
-    val baseXPx = max((block.x - padX / 2) * scaleFactor, 0.0f)
-    val baseYPx = max((block.y - padY / 2) * scaleFactor, 0.0f)
+    val xPx = max((block.x - padX / 2) * scaleFactor, 0.0f)
+    val yPx = max((block.y - padY / 2) * scaleFactor, 0.0f)
     val baseWidth = ((block.width + padX) * scaleFactor).pxToDp()
     val baseHeight = ((block.height + padY) * scaleFactor).pxToDp()
     val isVertical = block.angle > 85
@@ -65,24 +77,17 @@ fun SmartTranslationBlock(
     val isKoreanToEnglish = isKoreanToEnglishTranslation(sourceLanguage, targetLanguage)
 
     // Remember calculated dimensions to avoid recalculation
-    val calculatedDimensions = remember(block.translation, isKoreanToEnglish) {
+    val calculatedDimensions = remember(block.translation, isKoreanToEnglish, translatorType) {
         calculateOptimalDimensions(
             text = block.translation,
             originalText = block.text,
             baseWidth = baseWidth,
             baseHeight = baseHeight,
             fontFamily = fontFamily,
-            isKoreanToEnglish = isKoreanToEnglish
+            isKoreanToEnglish = isKoreanToEnglish,
+            translatorType = translatorType
         )
     }
-
-    // Center the text container when dimensions are expanded
-    // Calculate offset to center the expanded box over the original bubble position
-    val density = LocalDensity.current
-    val widthExpansionPx = with(density) { (calculatedDimensions.width - baseWidth).toPx() }
-    val heightExpansionPx = with(density) { (calculatedDimensions.height - baseHeight).toPx() }
-    val xPx = max(baseXPx - (widthExpansionPx / 2), 0.0f)
-    val yPx = max(baseYPx - (heightExpansionPx / 2), 0.0f)
 
     Box(
         modifier = modifier
@@ -90,9 +95,22 @@ fun SmartTranslationBlock(
             .offset(xPx.pxToDp(), yPx.pxToDp())
             .requiredSize(calculatedDimensions.width, calculatedDimensions.height),
     ) {
+        val density = LocalDensity.current
         SubcomposeLayout { constraints ->
-            val maxWidthPx = with(density) { calculatedDimensions.width.roundToPx() }
-            val maxHeightPx = with(density) { calculatedDimensions.height.roundToPx() }
+            // Apply edge padding to prevent text touching bubble edges
+            val horizontalPaddingPx = with(density) { (HORIZONTAL_PADDING_DP.dp).roundToPx() }
+            val verticalPaddingPx = with(density) { (VERTICAL_PADDING_DP.dp).roundToPx() }
+
+            // Calculate available text area with padding and safety margin
+            val totalHorizontalPadding = horizontalPaddingPx * 2
+            val totalVerticalPadding = verticalPaddingPx * 2
+
+            val maxWidthPx = with(density) {
+                ((calculatedDimensions.width.roundToPx() - totalHorizontalPadding) * TEXT_AREA_SAFETY_MARGIN).toInt()
+            }
+            val maxHeightPx = with(density) {
+                ((calculatedDimensions.height.roundToPx() - totalVerticalPadding) * TEXT_AREA_SAFETY_MARGIN).toInt()
+            }
 
             // Binary search for optimal font size with minimum threshold
             // Cap maximum font size for CJK languages to prevent oversized fonts
@@ -110,7 +128,7 @@ fun SmartTranslationBlock(
                         fontFamily = fontFamily,
                         color = Color.Black,
                         overflow = TextOverflow.Clip,
-                        textAlign = TextAlign.Center,
+                        textAlign = TextAlign.Justify,
                         maxLines = calculateMaxLines(maxHeightPx, mid, isKoreanToEnglish),
                         softWrap = true,
                         modifier = Modifier
@@ -139,7 +157,7 @@ fun SmartTranslationBlock(
                     color = Color.Black,
                     softWrap = true,
                     overflow = TextOverflow.Clip,
-                    textAlign = TextAlign.Center,
+                    textAlign = TextAlign.Justify,
                     maxLines = calculateMaxLines(maxHeightPx, bestSize, isKoreanToEnglish),
                     modifier = Modifier
                         .width(calculatedDimensions.width)
@@ -158,6 +176,7 @@ fun SmartTranslationBlock(
 /**
  * Calculate optimal bubble dimensions with expansion if needed
  * Includes special handling for Korean -> English translation
+ * Applies translator-specific optimizations (e.g., Cloud Translation produces longer text)
  */
 private fun calculateOptimalDimensions(
     text: String,
@@ -166,10 +185,17 @@ private fun calculateOptimalDimensions(
     baseHeight: Dp,
     fontFamily: FontFamily,
     isKoreanToEnglish: Boolean,
+    translatorType: String = "gemini",
 ): BubbleDimensions {
     // For Korean -> English, apply specialized expansion algorithm
     if (isKoreanToEnglish) {
-        return calculateKoreanToEnglishDimensions(text, originalText, baseWidth, baseHeight)
+        return calculateKoreanToEnglishDimensions(
+            text,
+            originalText,
+            baseWidth,
+            baseHeight,
+            translatorType
+        )
     }
 
     // For short text, use base dimensions
@@ -179,13 +205,23 @@ private fun calculateOptimalDimensions(
 
     // For longer text that might not fit at minimum font size,
     // apply expansion proportionally
+    // Cloud Translation produces longer output, so apply additional expansion
+    val isCloudTranslation = translatorType.lowercase() == "cloud"
+    val cloudMultiplier = if (isCloudTranslation) CLOUD_TRANSLATION_EXPANSION_MULTIPLIER else 1.0f
+
     val estimatedExpansionNeeded = when {
-        text.length > 200 -> MAX_BUBBLE_EXPANSION
-        text.length > 100 -> BUBBLE_EXPANSION_RATIO
+        text.length > 200 -> MAX_BUBBLE_EXPANSION * cloudMultiplier
+        text.length > 100 -> BUBBLE_EXPANSION_RATIO * cloudMultiplier
         else -> 1.0f
     }
 
-    val expansionRatio = estimatedExpansionNeeded.coerceAtMost(MAX_BUBBLE_EXPANSION)
+    val maxExpansion = if (isCloudTranslation) {
+        (MAX_BUBBLE_EXPANSION * CLOUD_TRANSLATION_EXPANSION_MULTIPLIER).coerceAtMost(2.0f)
+    } else {
+        MAX_BUBBLE_EXPANSION
+    }
+
+    val expansionRatio = estimatedExpansionNeeded.coerceAtMost(maxExpansion)
 
     return BubbleDimensions(
         width = baseWidth * expansionRatio,
@@ -197,13 +233,28 @@ private fun calculateOptimalDimensions(
 /**
  * Calculate bubble dimensions specifically for Korean -> English translation
  * Korean text is extremely compact; English translations typically expand 1.8-2.5x
+ * Cloud Translation produces longer output (2.2-3.0x) due to more literal translation
  */
 private fun calculateKoreanToEnglishDimensions(
     englishText: String,
     koreanText: String,
     baseWidth: Dp,
     baseHeight: Dp,
+    translatorType: String = "gemini",
 ): BubbleDimensions {
+    // Cloud Translation produces longer, more literal translations
+    val isCloudTranslation = translatorType.lowercase() == "cloud"
+    val minExpansion = if (isCloudTranslation) {
+        CLOUD_KOREAN_TO_ENGLISH_MIN_EXPANSION
+    } else {
+        KOREAN_TO_ENGLISH_MIN_EXPANSION
+    }
+    val maxExpansion = if (isCloudTranslation) {
+        CLOUD_KOREAN_TO_ENGLISH_MAX_EXPANSION
+    } else {
+        KOREAN_TO_ENGLISH_MAX_EXPANSION
+    }
+
     // Calculate length ratio (English characters / Korean characters)
     val lengthRatio = if (koreanText.isNotEmpty()) {
         englishText.length.toFloat() / koreanText.length.toFloat()
@@ -214,22 +265,22 @@ private fun calculateKoreanToEnglishDimensions(
     // Determine expansion ratio based on length ratio and absolute lengths
     val expansionRatio = when {
         // Very long translations need maximum expansion
-        englishText.length > 200 -> KOREAN_TO_ENGLISH_MAX_EXPANSION
+        englishText.length > 200 -> maxExpansion
 
         // High length ratio (English much longer than Korean)
-        lengthRatio > 3.0f -> KOREAN_TO_ENGLISH_MAX_EXPANSION
-        lengthRatio > 2.0f -> KOREAN_TO_ENGLISH_MAX_EXPANSION * 0.9f
+        lengthRatio > 3.0f -> maxExpansion
+        lengthRatio > 2.0f -> maxExpansion * 0.9f
 
         // Medium length text
-        englishText.length > 100 -> KOREAN_TO_ENGLISH_MIN_EXPANSION * 1.2f
-        englishText.length > 50 -> KOREAN_TO_ENGLISH_MIN_EXPANSION
+        englishText.length > 100 -> minExpansion * 1.2f
+        englishText.length > 50 -> minExpansion
 
         // Short text (less aggressive expansion)
         englishText.length < 20 -> 1.3f
 
         // Default case
-        else -> KOREAN_TO_ENGLISH_MIN_EXPANSION
-    }.coerceAtMost(KOREAN_TO_ENGLISH_MAX_EXPANSION)
+        else -> minExpansion
+    }.coerceAtMost(maxExpansion)
 
     // Apply minimum width constraint for Korean->English to prevent narrow tall bubbles
     val minWidthForKorean = baseWidth * 1.4f

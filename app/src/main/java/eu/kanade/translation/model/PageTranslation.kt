@@ -9,6 +9,7 @@ data class PageTranslation(
     var imgHeight: Float = 0f,
     var sourceLanguage: String = "auto", // Store source language for rendering optimizations
     var targetLanguage: String = "en", // Store target language for translation pair optimizations
+    var translatorType: String = "gemini", // Store translator engine type (cloud, gemini, mlkit, openrouter) for rendering optimizations
 ) {
     companion object {
         val EMPTY = PageTranslation()
