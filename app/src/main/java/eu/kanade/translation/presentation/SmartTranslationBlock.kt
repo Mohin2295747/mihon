@@ -40,13 +40,17 @@ private const val VERTICAL_PADDING_DP = 2 // Top/bottom inset for rectangles (re
 private const val OVAL_VERTICAL_PADDING_DP = 10 // Increased vertical padding for horizontal ovals to avoid curved edges
 private const val OVAL_HORIZONTAL_PADDING_DP = 4 // Reduced horizontal padding for vertical ovals
 
-// Safety margins for text area calculation
+// HARD WIDTH CONSTRAINT: 90% rule to prevent horizontal overflow
+// If bubble width is 200px, text uses max 180px per line (90%)
+private const val HARD_WIDTH_CONSTRAINT = 0.90f // 90% of bubble width - STRICT to prevent overflow
+
+// Safety margins for text area calculation after applying hard constraint
 // Rectangles: Use most of available space
-private const val WIDTH_SAFETY_MARGIN = 0.95f // Use 95% of available width
-private const val HEIGHT_SAFETY_MARGIN = 0.99f // Use 99% of available height (increased from 0.98 for rectangles)
+private const val WIDTH_SAFETY_MARGIN = 0.98f // Use 98% of constrained width (was 95%, increased since we have hard constraint)
+private const val HEIGHT_SAFETY_MARGIN = 0.99f // Use 99% of available height
 
 // Horizontal ovals (Korean common case): Reduce vertical area to avoid curved top/bottom edges
-private const val OVAL_WIDTH_SAFETY_MARGIN = 0.95f // Keep 95% width (curves are at top/bottom, not sides)
+private const val OVAL_WIDTH_SAFETY_MARGIN = 0.98f // Keep 98% width (was 95%, increased with hard constraint)
 private const val OVAL_HEIGHT_SAFETY_MARGIN = 0.70f // Use only 70% of height (avoid top/bottom curves) - CRITICAL for Korean ovals
 
 // Vertical ovals: Reduce horizontal area to avoid curved left/right edges
@@ -95,23 +99,37 @@ fun SmartTranslationBlock(
     val padY = block.symHeight * paddingMultiplier
     val xPx = max((block.x - padX / 2) * scaleFactor, 0.0f)
     val yPx = max((block.y - padY / 2) * scaleFactor, 0.0f)
-    val baseWidth = ((block.width + padX) * scaleFactor).pxToDp()
-    val baseHeight = ((block.height + padY) * scaleFactor).pxToDp()
+
+    // Calculate raw bubble dimensions (100% size for background)
+    val rawWidth = ((block.width + padX) * scaleFactor).pxToDp()
+    val rawHeight = ((block.height + padY) * scaleFactor).pxToDp()
     val isVertical = block.angle > 85
 
     // Detect Korean -> English translation pair
     val isKoreanToEnglish = isKoreanToEnglishTranslation(sourceLanguage, targetLanguage)
 
-    // Remember calculated dimensions to avoid recalculation
+    // Calculate optimal dimensions with expansion (if needed for Korean->English)
+    // Then apply HARD 90% WIDTH CONSTRAINT to final result
     val calculatedDimensions = remember(block.translation, isKoreanToEnglish, translatorType) {
-        calculateOptimalDimensions(
+        val expandedDimensions = calculateOptimalDimensions(
             text = block.translation,
             originalText = block.text,
-            baseWidth = baseWidth,
-            baseHeight = baseHeight,
+            baseWidth = rawWidth,  // Start with full width
+            baseHeight = rawHeight,
             fontFamily = fontFamily,
             isKoreanToEnglish = isKoreanToEnglish,
             translatorType = translatorType
+        )
+
+        // APPLY HARD 90% WIDTH CONSTRAINT TO FINAL EXPANDED DIMENSIONS
+        // If bubble width = 200px:
+        // - Background uses 200px (100%)
+        // - Text limited to 180px (90%) max, even after expansion
+        // This prevents text from overflowing beyond white background
+        BubbleDimensions(
+            width = minOf(expandedDimensions.width, rawWidth * HARD_WIDTH_CONSTRAINT),
+            height = expandedDimensions.height,  // No height constraint
+            expansionRatio = expandedDimensions.expansionRatio
         )
     }
 
