@@ -34,14 +34,15 @@ private const val MAX_BUBBLE_EXPANSION = 1.5f
 
 // Edge padding to prevent text touching bubble boundaries
 private const val HORIZONTAL_PADDING_DP = 8 // Left/right inset in dp
-private const val VERTICAL_PADDING_DP = 6 // Top/bottom inset in dp
-private const val TEXT_AREA_SAFETY_MARGIN = 0.95f // Use 95% of available space
+private const val VERTICAL_PADDING_DP = 4 // Top/bottom inset in dp (reduced from 6 to allow more vertical space)
+private const val WIDTH_SAFETY_MARGIN = 0.95f // Use 95% of available width (conservative for horizontal fit)
+private const val HEIGHT_SAFETY_MARGIN = 0.98f // Use 98% of available height (less conservative to utilize vertical space)
 
 // Korean -> English specific constants
 private const val KOREAN_TO_ENGLISH_MIN_EXPANSION = 1.8f
 private const val KOREAN_TO_ENGLISH_MAX_EXPANSION = 2.5f
-private const val KOREAN_LINE_HEIGHT_MULTIPLIER = 1.7f
-private const val GENERIC_LINE_HEIGHT_MULTIPLIER = 1.5f
+private const val KOREAN_LINE_HEIGHT_MULTIPLIER = 1.4f // Reduced from 1.7f to pack lines closer and utilize vertical space better
+private const val GENERIC_LINE_HEIGHT_MULTIPLIER = 1.3f // Reduced from 1.5f for better vertical space utilization
 
 // Cloud Translation specific constants (longer translations)
 private const val CLOUD_KOREAN_TO_ENGLISH_MIN_EXPANSION = 2.2f
@@ -102,15 +103,19 @@ fun SmartTranslationBlock(
             val verticalPaddingPx = with(density) { (VERTICAL_PADDING_DP.dp).roundToPx() }
 
             // Calculate available text area with padding and safety margin
+            // Use separate safety margins for width (conservative) and height (aggressive) to utilize vertical space
             val totalHorizontalPadding = horizontalPaddingPx * 2
             val totalVerticalPadding = verticalPaddingPx * 2
 
             val maxWidthPx = with(density) {
-                ((calculatedDimensions.width.roundToPx() - totalHorizontalPadding) * TEXT_AREA_SAFETY_MARGIN).toInt()
+                ((calculatedDimensions.width.roundToPx() - totalHorizontalPadding) * WIDTH_SAFETY_MARGIN).toInt()
             }
             val maxHeightPx = with(density) {
-                ((calculatedDimensions.height.roundToPx() - totalVerticalPadding) * TEXT_AREA_SAFETY_MARGIN).toInt()
+                ((calculatedDimensions.height.roundToPx() - totalVerticalPadding) * HEIGHT_SAFETY_MARGIN).toInt()
             }
+
+            // Calculate actual constrained width for text layout (with padding applied)
+            val constrainedWidthDp = with(density) { maxWidthPx.toDp() }
 
             // Binary search for optimal font size with minimum threshold
             // Cap maximum font size for CJK languages to prevent oversized fonts
@@ -132,7 +137,7 @@ fun SmartTranslationBlock(
                         maxLines = calculateMaxLines(maxHeightPx, mid, isKoreanToEnglish),
                         softWrap = true,
                         modifier = Modifier
-                            .width(calculatedDimensions.width)
+                            .width(constrainedWidthDp)
                             .rotate(if (isVertical) 0f else block.angle)
                             .align(Alignment.Center),
                     )
@@ -148,7 +153,7 @@ fun SmartTranslationBlock(
 
             val finalFontSize = bestSize.coerceAtLeast(MIN_FONT_SIZE.toInt()).sp
 
-            // Measure final layout
+            // Measure final layout with constrained width to prevent horizontal clipping
             val textPlaceable = subcompose(Unit) {
                 Text(
                     text = block.translation,
@@ -160,11 +165,11 @@ fun SmartTranslationBlock(
                     textAlign = TextAlign.Justify,
                     maxLines = calculateMaxLines(maxHeightPx, bestSize, isKoreanToEnglish),
                     modifier = Modifier
-                        .width(calculatedDimensions.width)
+                        .width(constrainedWidthDp)
                         .rotate(if (isVertical) 0f else block.angle)
                         .align(Alignment.Center),
                 )
-            }[0].measure(constraints)
+            }[0].measure(Constraints(maxWidth = maxWidthPx, maxHeight = maxHeightPx))
 
             layout(textPlaceable.width, textPlaceable.height) {
                 textPlaceable.place(0, 0)
@@ -295,14 +300,16 @@ private fun calculateKoreanToEnglishDimensions(
 
 /**
  * Calculate maximum lines based on bubble height and font size
- * Uses Korean-aware line height multiplier for better Hangul rendering
+ * Uses optimized line height multipliers to maximize vertical space utilization
+ * while maintaining readability
  */
 private fun calculateMaxLines(heightPx: Int, fontSize: Int, isKoreanToEnglish: Boolean): Int {
-    // Korean Hangul requires slightly more line height due to vertical stacking of consonants/vowels
+    // Use reduced line height multipliers to pack lines closer together
+    // This allows better utilization of vertical space and reduces wasted space at bottom of bubbles
     val lineHeightMultiplier = if (isKoreanToEnglish) {
-        KOREAN_LINE_HEIGHT_MULTIPLIER
+        KOREAN_LINE_HEIGHT_MULTIPLIER // 1.4x for Korean→English
     } else {
-        GENERIC_LINE_HEIGHT_MULTIPLIER
+        GENERIC_LINE_HEIGHT_MULTIPLIER // 1.3x for other languages
     }
 
     val approximateLineHeight = fontSize * lineHeightMultiplier
