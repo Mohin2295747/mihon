@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.translation.model.BubbleShape
 import eu.kanade.translation.model.TranslationBlock
+import logcat.logcat
 import kotlin.math.max
 
 // Smart bubble sizing constants
@@ -53,6 +54,9 @@ private const val HEIGHT_SAFETY_MARGIN = 0.99f // Use 99% of available height
 private const val OVAL_WIDTH_SAFETY_MARGIN = 0.98f // Keep 98% width (was 95%, increased with hard constraint)
 private const val OVAL_HEIGHT_SAFETY_MARGIN = 0.70f // Use only 70% of height (avoid top/bottom curves) - CRITICAL for Korean ovals
 
+// Non-CJK horizontal oval margin (Spanish/Indonesian -> English)
+private const val NON_CJK_OVAL_HEIGHT_SAFETY_MARGIN = 0.85f // Use 85% of height (more space than Korean 70%)
+
 // Vertical ovals: Reduce horizontal area to avoid curved left/right edges
 private const val VERTICAL_OVAL_WIDTH_SAFETY_MARGIN = 0.70f // Use only 70% width (avoid left/right curves)
 private const val VERTICAL_OVAL_HEIGHT_SAFETY_MARGIN = 0.95f // Keep 95% height
@@ -67,6 +71,10 @@ private const val GENERIC_LINE_HEIGHT_MULTIPLIER = 1.3f // Reduced from 1.5f for
 private const val CLOUD_KOREAN_TO_ENGLISH_MIN_EXPANSION = 2.2f
 private const val CLOUD_KOREAN_TO_ENGLISH_MAX_EXPANSION = 3.0f
 private const val CLOUD_TRANSLATION_EXPANSION_MULTIPLIER = 1.15f
+
+// Spanish/Indonesian -> English specific constants
+// These languages produce moderately longer English text (not as extreme as Korean)
+private const val NON_CJK_TO_ENGLISH_EXPANSION = 1.4f
 
 /**
  * Helper data class for shape-specific padding and margin configurations
@@ -108,9 +116,9 @@ fun SmartTranslationBlock(
     // Detect Korean -> English translation pair
     val isKoreanToEnglish = isKoreanToEnglishTranslation(sourceLanguage, targetLanguage)
 
-    // Calculate optimal dimensions with expansion (if needed for Korean->English)
+    // Calculate optimal dimensions with expansion (if needed for Korean->English or Spanish/Indonesian->English)
     // Then apply HARD 90% WIDTH CONSTRAINT to final result
-    val calculatedDimensions = remember(block.translation, isKoreanToEnglish, translatorType) {
+    val calculatedDimensions = remember(block.translation, isKoreanToEnglish, translatorType, sourceLanguage, targetLanguage) {
         val expandedDimensions = calculateOptimalDimensions(
             text = block.translation,
             originalText = block.text,
@@ -118,7 +126,9 @@ fun SmartTranslationBlock(
             baseHeight = rawHeight,
             fontFamily = fontFamily,
             isKoreanToEnglish = isKoreanToEnglish,
-            translatorType = translatorType
+            translatorType = translatorType,
+            sourceLanguage = sourceLanguage,
+            targetLanguage = targetLanguage
         )
 
         // APPLY HARD 90% WIDTH CONSTRAINT TO FINAL EXPANDED DIMENSIONS
@@ -144,20 +154,25 @@ fun SmartTranslationBlock(
             // Detect bubble shape for adaptive text constraints
             val bubbleShape = block.detectShape()
 
+            // Get language-specific oval height margin (separate CJK vs non-CJK logic)
+            val ovalHeightMargin = getNonCJKOvalHeightMargin(sourceLanguage, targetLanguage)
+
             // Apply shape-specific padding and safety margins
-            // Horizontal ovals (Korean common): More vertical padding, reduce vertical area to avoid curves
+            // Horizontal ovals: More vertical padding, reduce vertical area to avoid curves
+            //   - Korean/CJK: 70% height (very conservative)
+            //   - Spanish/Indonesian: 85% height (more space)
             // Vertical ovals: More horizontal padding, reduce horizontal area
             // Rectangles/Squares: Standard padding, maximize space usage
             val (horizontalPaddingDp, verticalPaddingDp, widthMargin, heightMargin) = when (bubbleShape) {
                 BubbleShape.HORIZONTAL_OVAL -> {
-                    // Korean horizontal oval bubbles - CRITICAL CASE
-                    // Text gets cut off at curved top/bottom edges
-                    // Solution: Use only middle 70% of height, increase vertical padding
+                    // Horizontal oval bubbles - language-specific height margins
+                    // Korean/CJK: Use 70% of height (very conservative to avoid curves)
+                    // Spanish/Indonesian: Use 85% of height (more space to prevent clipping)
                     Quadruple(
                         HORIZONTAL_PADDING_DP,        // 8dp horizontal
                         OVAL_VERTICAL_PADDING_DP,     // 10dp vertical (increased to avoid curves)
-                        OVAL_WIDTH_SAFETY_MARGIN,     // 95% width (keep full width)
-                        OVAL_HEIGHT_SAFETY_MARGIN     // 70% height (avoid curves!) - KEY FIX
+                        OVAL_WIDTH_SAFETY_MARGIN,     // 98% width (keep full width)
+                        ovalHeightMargin              // 85% for Spanish/Indonesian, 70% for Korean/CJK
                     )
                 }
                 BubbleShape.VERTICAL_OVAL -> {
@@ -255,7 +270,9 @@ fun SmartTranslationBlock(
                 )
             }[0].measure(Constraints(maxWidth = maxWidthPx, maxHeight = maxHeightPx))
 
-            layout(textPlaceable.width, textPlaceable.height) {
+            // Use full available space for layout to prevent clipping
+            // This allows text to render in the entire bubble area
+            layout(constraints.maxWidth, constraints.maxHeight) {
                 textPlaceable.place(0, 0)
             }
         }
@@ -264,7 +281,7 @@ fun SmartTranslationBlock(
 
 /**
  * Calculate optimal bubble dimensions with expansion if needed
- * Includes special handling for Korean -> English translation
+ * Includes special handling for Korean -> English and Spanish/Indonesian -> English translations
  * Applies translator-specific optimizations (e.g., Cloud Translation produces longer text)
  */
 private fun calculateOptimalDimensions(
@@ -275,8 +292,18 @@ private fun calculateOptimalDimensions(
     fontFamily: FontFamily,
     isKoreanToEnglish: Boolean,
     translatorType: String = "gemini",
+    sourceLanguage: String = "auto",
+    targetLanguage: String = "en"
 ): BubbleDimensions {
-    // For Korean -> English, apply specialized expansion algorithm
+    // Check for Spanish/Indonesian -> English FIRST (separate from CJK logic)
+    // This ensures complete separation of concerns
+    val nonCJKExpansion = calculateNonCJKExpansion(sourceLanguage, targetLanguage, baseWidth, baseHeight)
+    if (nonCJKExpansion.expansionRatio > 1.0f) {
+        // Spanish/Indonesian expansion applied, return early
+        return nonCJKExpansion
+    }
+
+    // For Korean -> English, apply specialized expansion algorithm (CJK logic path)
     if (isKoreanToEnglish) {
         return calculateKoreanToEnglishDimensions(
             text,
@@ -418,4 +445,66 @@ private fun isKoreanToEnglishTranslation(sourceLanguage: String, targetLanguage:
     val isKoreanSource = sourceLanguage.lowercase() in listOf("ko", "korean", "kor")
     val isEnglishTarget = targetLanguage.lowercase() in listOf("en", "english", "eng")
     return isKoreanSource && isEnglishTarget
+}
+
+/**
+ * Detect if this is a Spanish or Indonesian -> English translation pair
+ * These languages often produce longer English translations that need special handling
+ * for oval bubbles to prevent text clipping
+ */
+private fun isSpanishOrIndonesianToEnglish(sourceLanguage: String, targetLanguage: String): Boolean {
+    val source = sourceLanguage.lowercase()
+    val target = targetLanguage.lowercase()
+
+    val isSpanishSource = source in listOf("es", "spanish", "spa", "español")
+    val isIndonesianSource = source in listOf("id", "in", "indonesian", "ind")
+    val isEnglishTarget = target in listOf("en", "english", "eng")
+
+    return (isSpanishSource || isIndonesianSource) && isEnglishTarget
+}
+
+/**
+ * Calculate bubble dimensions for Spanish/Indonesian -> English translations
+ * These languages produce moderately longer English text requiring expansion
+ * Completely separate from CJK/Korean expansion logic
+ */
+private fun calculateNonCJKExpansion(
+    sourceLanguage: String,
+    targetLanguage: String,
+    baseWidth: Dp,
+    baseHeight: Dp
+): BubbleDimensions {
+    if (!isSpanishOrIndonesianToEnglish(sourceLanguage, targetLanguage)) {
+        // Not Spanish/Indonesian -> English, return base dimensions
+        return BubbleDimensions(baseWidth, baseHeight, 1.0f)
+    }
+
+    // Apply 1.4x expansion for Spanish/Indonesian -> English
+    // This is less aggressive than Korean (1.8-3.0x) but still provides adequate space
+    val expansionRatio = NON_CJK_TO_ENGLISH_EXPANSION
+
+    // Log expansion for debugging
+    logcat(tag = "SmartTranslationBlock") { "Non-CJK expansion: $sourceLanguage -> $targetLanguage, ratio = ${expansionRatio}x" }
+
+    return BubbleDimensions(
+        width = baseWidth * expansionRatio,
+        height = baseHeight * expansionRatio,
+        expansionRatio = expansionRatio
+    )
+}
+
+/**
+ * Get the appropriate oval height safety margin based on language pair
+ * Completely separate from CJK/Korean logic
+ * Returns 0.85f for Spanish/Indonesian (more space), 0.70f for Korean/CJK
+ */
+private fun getNonCJKOvalHeightMargin(sourceLanguage: String, targetLanguage: String): Float {
+    return if (isSpanishOrIndonesianToEnglish(sourceLanguage, targetLanguage)) {
+        // Spanish/Indonesian -> English: Use 85% height (more vertical space)
+        logcat(tag = "SmartTranslationBlock") { "Non-CJK oval margin: Using 85% height for $sourceLanguage -> $targetLanguage" }
+        NON_CJK_OVAL_HEIGHT_SAFETY_MARGIN
+    } else {
+        // Korean/CJK or other: Use 70% height (default)
+        OVAL_HEIGHT_SAFETY_MARGIN
+    }
 }
