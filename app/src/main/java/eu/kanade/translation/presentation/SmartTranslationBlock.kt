@@ -195,16 +195,17 @@ fun SmartTranslationBlock(
             }
             val maxHeightPx = with(density) {
                 ((calculatedDimensions.height.roundToPx() - totalVerticalPadding) * heightMargin).toInt()
+                    .coerceAtLeast(0)  // Prevent negative values
             }
 
             // Calculate actual constrained width for text layout (with padding applied)
             val constrainedWidthDp = with(density) { maxWidthPx.toDp() }
 
             // Binary search for optimal font size with minimum threshold
-            // Cap maximum font size for CJK languages to prevent oversized fonts
+            // Cap maximum font size to 12dp for all languages for consistency
             val isCJKLanguage = sourceLanguage.lowercase() in listOf("ko", "korean", "ja", "japanese", "zh", "chinese")
             var low = MIN_FONT_SIZE.toInt()
-            var high = if (isCJKLanguage) CJK_MAX_FONT_SIZE.toInt() else 100
+            var high = CJK_MAX_FONT_SIZE.toInt()  // Use 12dp for all languages
             var bestSize = low
 
             while (low <= high) {
