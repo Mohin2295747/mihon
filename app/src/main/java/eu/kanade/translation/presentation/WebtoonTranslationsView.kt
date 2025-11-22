@@ -76,7 +76,12 @@ class WebtoonTranslationsView :
     // Override touch events to intercept clicks on translation bubbles
     override fun onTouchEvent(event: MotionEvent): Boolean {
         // Only handle ACTION_UP (tap completion) to match clickable behavior
-        if (event.actionMasked == MotionEvent.ACTION_UP && onBlockDelete != null) {
+        // Validate: view must be visible, have deletion callback, and have calculated bounds
+        if (event.actionMasked == MotionEvent.ACTION_UP &&
+            onBlockDelete != null &&
+            isVisible &&
+            bubbleBounds.isNotEmpty()) {
+
             val x = event.x
             val y = event.y
 
@@ -99,6 +104,11 @@ class WebtoonTranslationsView :
 
     // Callback reference to trigger menu display
     private var bubbleClickCallback: ((Int) -> Unit)? = null
+
+    init {
+        // Pre-initialize callback to prevent race condition during view creation
+        bubbleClickCallback = {} // No-op initially
+    }
 
     private fun performBubbleClick(index: Int) {
         bubbleClickCallback?.invoke(index)
@@ -228,23 +238,23 @@ class WebtoonTranslationsView :
         bubbleBounds.clear()
 
         translation.blocks.forEachIndexed { index, block ->
-            // Language-specific padding multipliers (matches SmartTranslationBlock)
+            // Language-specific padding multipliers (matches TextBlockBackground rendering)
             val paddingMultiplier = when (translation.sourceLanguage) {
                 "ko", "korean" -> 1.15f
                 "ja", "japanese" -> 1.2f
                 else -> 1.0f
             }
 
-            // Calculate padding (matches SmartTranslationBlock logic)
-            val padX = (block.symWidth * 2) * paddingMultiplier
-            val padY = block.symHeight * paddingMultiplier
+            // Calculate padding (FIXED: must match TextBlockBackground rendering exactly)
+            val padX = (block.symWidth / 2) * paddingMultiplier
+            val padY = (block.symHeight / 2) * paddingMultiplier
 
-            // Calculate position with padding offset (matches SmartTranslationBlock)
+            // Calculate position with padding offset (matches TextBlockBackground rendering)
             // Using max(..., 0.0f) to prevent negative coordinates
             val xPx = kotlin.math.max((block.x - padX / 2) * scaleFactor, 0.0f)
             val yPx = kotlin.math.max((block.y - padY / 2) * scaleFactor, 0.0f)
 
-            // Calculate dimensions with padding (matches TextBlockBackground)
+            // Calculate dimensions with padding (matches TextBlockBackground rendering)
             val widthPx = (block.width + padX) * scaleFactor
             val heightPx = (block.height + padY) * scaleFactor
 

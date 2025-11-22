@@ -22,6 +22,7 @@ internal class ArchivePageLoader(
             .sortedWith { f1, f2 -> f1.name.compareToCaseInsensitiveNaturalOrder(f2.name) }
             .mapIndexed { i, entry ->
                 ReaderPage(i).apply {
+                    fileName = entry.name // TachiyomiAT: Set fileName for translation deletion
                     translation = translations[entry.name]
                     stream = { reader.getInputStream(entry.name)!! }
                     status = Page.State.Ready

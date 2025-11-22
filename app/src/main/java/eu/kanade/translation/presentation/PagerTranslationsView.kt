@@ -85,7 +85,12 @@ class PagerTranslationsView :
     // Override touch events to intercept clicks on translation bubbles
     override fun onTouchEvent(event: MotionEvent): Boolean {
         // Only handle ACTION_UP (tap completion) to match clickable behavior
-        if (event.actionMasked == MotionEvent.ACTION_UP && onBlockDelete != null) {
+        // Validate: view must be visible, have deletion callback, and have calculated bounds
+        if (event.actionMasked == MotionEvent.ACTION_UP &&
+            onBlockDelete != null &&
+            isVisible &&
+            bubbleBounds.isNotEmpty()) {
+
             val x = event.x
             val y = event.y
 
@@ -108,6 +113,11 @@ class PagerTranslationsView :
 
     // Callback reference to trigger menu display
     private var bubbleClickCallback: ((Int) -> Unit)? = null
+
+    init {
+        // Pre-initialize callback to prevent race condition during view creation
+        bubbleClickCallback = {} // No-op initially
+    }
 
     private fun performBubbleClick(index: Int) {
         bubbleClickCallback?.invoke(index)
@@ -167,14 +177,14 @@ class PagerTranslationsView :
     fun TextBlockBackground(zoomScale: Float) {
         // Language-specific padding multipliers to prevent text overlap
         val paddingMultiplier = when (translation.sourceLanguage) {
-            "ko", "korean" -> 1.5f // Korean needs more padding due to complex Hangul shapes
+            "ko", "korean" -> 1.15f // FIXED: Match touch detection (was 1.5f)
             "ja", "japanese" -> 1.2f // Japanese with Kanji also benefits from extra padding
             else -> 1.0f
         }
 
         translation.blocks.forEach { block ->
-            val padX = (block.symWidth / 2) * paddingMultiplier
-            val padY = (block.symHeight / 2) * paddingMultiplier
+            val padX = (block.symWidth * 2) * paddingMultiplier // FIXED: Match touch detection (was / 2)
+            val padY = block.symHeight * paddingMultiplier // FIXED: Match touch detection (was / 2)
             val bgX = ((block.x - padX / 2) * 1) * zoomScale
             val bgY = ((block.y - padY / 2) * 1) * zoomScale
             val bgWidth = (block.width + padX) * zoomScale
@@ -231,18 +241,18 @@ class PagerTranslationsView :
         bubbleBounds.clear()
 
         translation.blocks.forEachIndexed { index, block ->
-            // Language-specific padding multipliers (matches SmartTranslationBlock)
+            // Language-specific padding multipliers (matches TextBlockBackground rendering)
             val paddingMultiplier = when (translation.sourceLanguage) {
                 "ko", "korean" -> 1.15f
                 "ja", "japanese" -> 1.2f
                 else -> 1.0f
             }
 
-            // Calculate padding (matches SmartTranslationBlock logic)
+            // Calculate padding (must match TextBlockBackground rendering exactly)
             val padX = (block.symWidth * 2) * paddingMultiplier
             val padY = block.symHeight * paddingMultiplier
 
-            // Calculate bubble dimensions with padding offset (same logic as TextBlockBackground)
+            // Calculate bubble dimensions with padding offset (matches TextBlockBackground)
             // Note: viewTL offset is applied to account for pan/zoom
             val bgX = ((block.x - padX / 2) * 1) * zoomScale + viewTL.x
             val bgY = ((block.y - padY / 2) * 1) * zoomScale + viewTL.y

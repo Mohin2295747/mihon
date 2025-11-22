@@ -328,19 +328,28 @@ class PagerPageHolder(
                         val source = viewer.activity.viewModel.getSource()
 
                         if (manga != null && source != null) {
+                            // Check if fileName is available (required for deletion)
+                            val pageFileName = page.fileName
+                            if (pageFileName == null) {
+                                logcat(LogPriority.ERROR) {
+                                    "Cannot delete translation block: page.fileName is null for page ${page.index}"
+                                }
+                                return@launch
+                            }
+
                             // 1. Persist deletion to JSON file FIRST
                             val success = withIOContext {
                                 translationManager.deleteTranslationBlock(
                                     chapter = page.chapter.chapter,
                                     manga = manga,
                                     source = source,
-                                    pageFileName = "page_${page.index}",
+                                    pageFileName = pageFileName, // FIXED: Use actual file name from page loader
                                     blockIndex = blockIndex,
                                 )
                             }
 
                             if (success) {
-                                logcat { "Successfully deleted translation block $blockIndex from page ${page.index}" }
+                                logcat { "Successfully deleted translation block $blockIndex from $pageFileName" }
 
                                 // 2. Reload translation from disk to get fresh data
                                 val updatedTranslations = withIOContext {
@@ -354,14 +363,14 @@ class PagerPageHolder(
 
                                 withUIContext {
                                     // 3. Update in-memory data with fresh data from disk
-                                    page.translation = updatedTranslations["page_${page.index}"]
+                                    page.translation = updatedTranslations[pageFileName] // FIXED: Use actual file name
 
                                     // 4. Refresh view to show updated bubbles
                                     addTranslationsView()
                                 }
                             } else {
                                 logcat(LogPriority.ERROR) {
-                                    "Failed to delete translation block $blockIndex from page ${page.index} - file operation failed"
+                                    "Failed to delete translation block $blockIndex from $pageFileName - file operation failed"
                                 }
                             }
                         }

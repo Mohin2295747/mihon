@@ -10,6 +10,7 @@ open class ReaderPage(
     imageUrl: String? = null,
     var translation: PageTranslation? = null,
     var stream: (() -> InputStream)? = null,
+    var fileName: String? = null, // TachiyomiAT: Used for translation deletion
 ) : Page(index, url, imageUrl, null) {
 
     open lateinit var chapter: ReaderChapter

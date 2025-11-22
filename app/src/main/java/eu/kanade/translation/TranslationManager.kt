@@ -162,7 +162,10 @@ class TranslationManager(
             // Remove the specific block from the page
             val pageTranslation = translations[pageFileName]
             if (pageTranslation == null) {
-                logcat(LogPriority.ERROR) { "deleteTranslationBlock: Page '$pageFileName' not found in translation file" }
+                logcat(LogPriority.ERROR) {
+                    "deleteTranslationBlock: Page '$pageFileName' not found in translation file. " +
+                    "Available pages: ${translations.keys.joinToString(", ")}"
+                }
                 return false
             }
 
@@ -229,7 +232,10 @@ class TranslationManager(
             // Remove the specific block from the page
             val pageTranslation = translations[pageFileName]
             if (pageTranslation == null) {
-                logcat(LogPriority.ERROR) { "deleteTranslationBlock: Page '$pageFileName' not found in translation file" }
+                logcat(LogPriority.ERROR) {
+                    "deleteTranslationBlock: Page '$pageFileName' not found in translation file. " +
+                    "Available pages: ${translations.keys.joinToString(", ")}"
+                }
                 return false
             }
 

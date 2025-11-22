@@ -74,9 +74,15 @@ internal class DownloadPageLoader(
     private fun getPagesFromDirectory(translations: Map<String, PageTranslation>): List<ReaderPage> {
         val pages = downloadManager.buildPageList(source, manga, chapter.chapter.toDomainChapter()!!)
         return pages.map { (fileName, page) ->
-            ReaderPage(page.index, page.url, page.imageUrl) {
-                context.contentResolver.openInputStream(page.uri ?: Uri.EMPTY)!!
-            }.apply {
+            ReaderPage(
+                index = page.index,
+                url = page.url,
+                imageUrl = page.imageUrl,
+                stream = {
+                    context.contentResolver.openInputStream(page.uri ?: Uri.EMPTY)!!
+                },
+                fileName = fileName, // TachiyomiAT: Set fileName for translation deletion
+            ).apply {
                 translation = translations[fileName]
                 status = Page.State.Ready
             }
