@@ -1,6 +1,8 @@
 package eu.kanade.translation.presentation
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.requiredSize
@@ -100,6 +102,7 @@ fun SmartTranslationBlock(
     sourceLanguage: String = "auto", // Source language detected by OCR
     targetLanguage: String = "en", // Target language for translation
     translatorType: String = "gemini", // Translator engine type (cloud, gemini, etc.)
+    onBlockClick: (() -> Unit)? = null, // Callback when bubble is clicked
 ) {
     // Language-specific padding multipliers to prevent text overlap
     val paddingMultiplier = when (sourceLanguage) {
@@ -150,6 +153,17 @@ fun SmartTranslationBlock(
 
     Box(
         modifier = modifier
+            .then(
+                if (onBlockClick != null) {
+                    Modifier.clickable(
+                        onClick = { onBlockClick() },
+                        indication = null, // No ripple effect for clean look
+                        interactionSource = remember { MutableInteractionSource() },
+                    )
+                } else {
+                    Modifier
+                },
+            )
             .wrapContentSize(Alignment.CenterStart, true)
             .offset(xPx.pxToDp(), yPx.pxToDp())
             .requiredSize(calculatedDimensions.width, calculatedDimensions.height),

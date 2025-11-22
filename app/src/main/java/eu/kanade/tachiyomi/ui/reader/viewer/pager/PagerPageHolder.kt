@@ -17,6 +17,7 @@ import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import eu.kanade.tachiyomi.widget.ViewPagerAdapter
+import eu.kanade.translation.TranslationManager
 import eu.kanade.translation.data.TranslationFont
 import eu.kanade.translation.presentation.PagerTranslationsView
 import kotlinx.coroutines.Job
@@ -317,7 +318,31 @@ class PagerPageHolder(
     private fun addTranslationsView() {
         if (page.translation == null) return
         removeView(translationsView)
-        translationsView = PagerTranslationsView(context, translation = page.translation!!, font = font)
+        translationsView = PagerTranslationsView(context, translation = page.translation!!, font = font).apply {
+            // Wire up deletion callback for interactive bubble deletion
+            onBlockDelete = { blockIndex ->
+                // Remove block from in-memory translation data
+                page.translation?.blocks?.removeAt(blockIndex)
+
+                // Persist deletion to JSON file
+                val translationManager = Injekt.get<TranslationManager>()
+                val manga = viewer.activity.viewModel.manga
+                val source = viewer.activity.viewModel.getSource()
+
+                if (manga != null && source != null) {
+                    translationManager.deleteTranslationBlock(
+                        chapter = page.chapter.chapter,
+                        manga = manga,
+                        source = source,
+                        pageFileName = "page_${page.index}",
+                        blockIndex = blockIndex,
+                    )
+                }
+
+                // Refresh view to show updated bubbles
+                addTranslationsView()
+            }
+        }
         if (!showTranslations) translationsView?.hide()
         addView(translationsView, MATCH_PARENT, MATCH_PARENT)
     }

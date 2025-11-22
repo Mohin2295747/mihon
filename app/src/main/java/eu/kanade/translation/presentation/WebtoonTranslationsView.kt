@@ -64,9 +64,17 @@ class WebtoonTranslationsView :
         ).toFontFamily()
     }
 
+    // Callback for when a translation block is deleted
+    var onBlockDelete: ((Int) -> Unit)? = null
+
     @Composable
     override fun Content() {
         var size by remember { mutableStateOf(IntSize.Zero) }
+
+        // State for popup menu
+        var showMenu by remember { mutableStateOf(false) }
+        var selectedBlockIndex by remember { mutableStateOf<Int?>(null) }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -82,7 +90,26 @@ class WebtoonTranslationsView :
             if (size == IntSize.Zero) return
             val scaleFactor = size.width / translation.imgWidth
             TextBlockBackground(scaleFactor)
-            TextBlockContent(scaleFactor)
+            TextBlockContent(scaleFactor) { index ->
+                selectedBlockIndex = index
+                showMenu = true
+            }
+
+            // Show popup menu when bubble is clicked
+            if (showMenu && selectedBlockIndex != null) {
+                TranslationBubbleMenu(
+                    expanded = showMenu,
+                    onDismiss = {
+                        showMenu = false
+                        selectedBlockIndex = null
+                    },
+                    onDelete = {
+                        onBlockDelete?.invoke(selectedBlockIndex!!)
+                        showMenu = false
+                        selectedBlockIndex = null
+                    },
+                )
+            }
         }
     }
 
@@ -126,8 +153,8 @@ class WebtoonTranslationsView :
     }
 
     @Composable
-    fun TextBlockContent(scaleFactor: Float) {
-        translation.blocks.forEach { block ->
+    fun TextBlockContent(scaleFactor: Float, onBlockClick: (Int) -> Unit = {}) {
+        translation.blocks.forEachIndexed { index, block ->
             SmartTranslationBlock(
                 block = block,
                 scaleFactor = scaleFactor,
@@ -135,6 +162,11 @@ class WebtoonTranslationsView :
                 sourceLanguage = translation.sourceLanguage,
                 targetLanguage = translation.targetLanguage,
                 translatorType = translation.translatorType,
+                onBlockClick = if (onBlockDelete != null) {
+                    { onBlockClick(index) }
+                } else {
+                    null
+                },
             )
         }
     }

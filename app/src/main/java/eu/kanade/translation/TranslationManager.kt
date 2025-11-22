@@ -16,9 +16,11 @@ import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onStart
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
+import kotlinx.serialization.json.encodeToStream
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.manga.model.Manga
+import eu.kanade.tachiyomi.data.database.models.Chapter as DbChapter
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.domain.translation.TranslationPreferences
 import uy.kohesive.injekt.Injekt
@@ -124,6 +126,106 @@ class TranslationManager(
             removeFromTranslationQueue(chapter)
             val file = provider.findTranslationFile(chapter.name, chapter.scanlator, manga.title, source)
             file?.delete()
+        }
+    }
+
+    /**
+     * Delete a single translation block from a specific page
+     * @param chapter The chapter containing the translation
+     * @param manga The manga containing the chapter
+     * @param source The source of the manga
+     * @param pageFileName The filename of the page (e.g., "page_5")
+     * @param blockIndex The index of the block to delete in the page's blocks list
+     * @return true if deletion successful, false otherwise
+     */
+    fun deleteTranslationBlock(
+        chapter: Chapter,
+        manga: Manga,
+        source: Source,
+        pageFileName: String,
+        blockIndex: Int,
+    ): Boolean {
+        try {
+            val file = provider.findTranslationFile(chapter.name, chapter.scanlator, manga.title, source)
+                ?: return false
+
+            // Load current translations
+            val translations = Json.decodeFromStream<MutableMap<String, PageTranslation>>(
+                file.openInputStream(),
+            ).toMutableMap()
+
+            // Remove the specific block from the page
+            val pageTranslation = translations[pageFileName] ?: return false
+            if (blockIndex < 0 || blockIndex >= pageTranslation.blocks.size) return false
+
+            pageTranslation.blocks.removeAt(blockIndex)
+
+            // If no blocks left on this page, remove the page entry entirely
+            if (pageTranslation.blocks.isEmpty()) {
+                translations.remove(pageFileName)
+            }
+
+            // If no pages left in the translation, delete the entire file
+            if (translations.isEmpty()) {
+                file.delete()
+                return true
+            }
+
+            // Save updated translation JSON
+            file.openOutputStream().use { stream ->
+                Json.encodeToStream(translations, stream)
+            }
+
+            return true
+        } catch (e: Exception) {
+            return false
+        }
+    }
+
+    /**
+     * Overload for deleting translation block with database Chapter model
+     */
+    fun deleteTranslationBlock(
+        chapter: DbChapter,
+        manga: Manga,
+        source: Source,
+        pageFileName: String,
+        blockIndex: Int,
+    ): Boolean {
+        try {
+            val file = provider.findTranslationFile(chapter.name, chapter.scanlator, manga.title, source)
+                ?: return false
+
+            // Load current translations
+            val translations = Json.decodeFromStream<MutableMap<String, PageTranslation>>(
+                file.openInputStream(),
+            ).toMutableMap()
+
+            // Remove the specific block from the page
+            val pageTranslation = translations[pageFileName] ?: return false
+            if (blockIndex < 0 || blockIndex >= pageTranslation.blocks.size) return false
+
+            pageTranslation.blocks.removeAt(blockIndex)
+
+            // If no blocks left on this page, remove the page entry entirely
+            if (pageTranslation.blocks.isEmpty()) {
+                translations.remove(pageFileName)
+            }
+
+            // If no pages left in the translation, delete the entire file
+            if (translations.isEmpty()) {
+                file.delete()
+                return true
+            }
+
+            // Save updated translation JSON
+            file.openOutputStream().use { stream ->
+                Json.encodeToStream(translations, stream)
+            }
+
+            return true
+        } catch (e: Exception) {
+            return false
         }
     }
 

@@ -14,6 +14,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,16 +72,43 @@ class PagerTranslationsView :
     val scaleState = MutableStateFlow(1f)
     val viewTLState = MutableStateFlow(PointF())
 
+    // Callback for when a translation block is deleted
+    var onBlockDelete: ((Int) -> Unit)? = null
+
     @Composable
     override fun Content() {
         val viewTL by viewTLState.collectAsState()
         val scale by scaleState.collectAsState()
+
+        // State for popup menu
+        var showMenu by remember { mutableStateOf(false) }
+        var selectedBlockIndex by remember { mutableStateOf<Int?>(null) }
+
         Box(
             modifier = Modifier
                 .absoluteOffset(viewTL.x.pxToDp(), viewTL.y.pxToDp()),
         ) {
             TextBlockBackground(scale)
-            TextBlockContent(scale)
+            TextBlockContent(scale) { index ->
+                selectedBlockIndex = index
+                showMenu = true
+            }
+
+            // Show popup menu when bubble is clicked
+            if (showMenu && selectedBlockIndex != null) {
+                TranslationBubbleMenu(
+                    expanded = showMenu,
+                    onDismiss = {
+                        showMenu = false
+                        selectedBlockIndex = null
+                    },
+                    onDelete = {
+                        onBlockDelete?.invoke(selectedBlockIndex!!)
+                        showMenu = false
+                        selectedBlockIndex = null
+                    },
+                )
+            }
         }
     }
 
@@ -124,8 +153,8 @@ class PagerTranslationsView :
     }
 
     @Composable
-    fun TextBlockContent(zoomScale: Float) {
-        translation.blocks.forEach { block ->
+    fun TextBlockContent(zoomScale: Float, onBlockClick: (Int) -> Unit = {}) {
+        translation.blocks.forEachIndexed { index, block ->
             SmartTranslationBlock(
                 block = block,
                 scaleFactor = zoomScale,
@@ -133,6 +162,11 @@ class PagerTranslationsView :
                 sourceLanguage = translation.sourceLanguage,
                 targetLanguage = translation.targetLanguage,
                 translatorType = translation.translatorType,
+                onBlockClick = if (onBlockDelete != null) {
+                    { onBlockClick(index) }
+                } else {
+                    null
+                },
             )
         }
     }
