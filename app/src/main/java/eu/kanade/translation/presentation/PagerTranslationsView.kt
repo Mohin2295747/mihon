@@ -2,7 +2,9 @@ package eu.kanade.translation.presentation
 
 import android.content.Context
 import android.graphics.PointF
+import android.graphics.RectF
 import android.util.AttributeSet
+import android.view.MotionEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.absoluteOffset
@@ -75,6 +77,42 @@ class PagerTranslationsView :
     // Callback for when a translation block is deleted
     var onBlockDelete: ((Int) -> Unit)? = null
 
+    // Track bubble bounds for touch hit-testing
+    private val bubbleBounds = mutableListOf<Pair<Int, RectF>>()
+    private var currentScale: Float = 1f
+    private var currentViewTL: PointF = PointF()
+
+    // Override touch events to intercept clicks on translation bubbles
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        // Only handle ACTION_UP (tap completion) to match clickable behavior
+        if (event.actionMasked == MotionEvent.ACTION_UP && onBlockDelete != null) {
+            val x = event.x
+            val y = event.y
+
+            // Check if touch is within any bubble bounds (accounting for view offset)
+            for ((index, bounds) in bubbleBounds) {
+                if (bounds.contains(x, y)) {
+                    // Manually trigger the compose click callback
+                    post {
+                        // Trigger menu display by invoking the stored callback
+                        performBubbleClick(index)
+                    }
+                    return true // Consume event to prevent page navigation
+                }
+            }
+        }
+
+        // Not on a bubble, let parent handle navigation
+        return super.onTouchEvent(event)
+    }
+
+    // Callback reference to trigger menu display
+    private var bubbleClickCallback: ((Int) -> Unit)? = null
+
+    private fun performBubbleClick(index: Int) {
+        bubbleClickCallback?.invoke(index)
+    }
+
     @Composable
     override fun Content() {
         val viewTL by viewTLState.collectAsState()
@@ -83,6 +121,19 @@ class PagerTranslationsView :
         // State for popup menu
         var showMenu by remember { mutableStateOf(false) }
         var selectedBlockIndex by remember { mutableStateOf<Int?>(null) }
+
+        // Update current state for hit-testing
+        currentScale = scale
+        currentViewTL = viewTL
+
+        // Calculate bubble bounds for hit-testing
+        calculateBubbleBounds(scale, viewTL)
+
+        // Store click callback for touch event interception
+        bubbleClickCallback = { index ->
+            selectedBlockIndex = index
+            showMenu = true
+        }
 
         Box(
             modifier = Modifier
@@ -168,6 +219,34 @@ class PagerTranslationsView :
                     null
                 },
             )
+        }
+    }
+
+    /**
+     * Calculate screen bounds for all translation bubbles to enable touch hit-testing.
+     * Uses the same positioning logic as TextBlockBackground to ensure accuracy.
+     * Accounts for zoom scale and view offset (pan).
+     */
+    private fun calculateBubbleBounds(zoomScale: Float, viewTL: PointF) {
+        bubbleBounds.clear()
+
+        translation.blocks.forEachIndexed { index, block ->
+            // Calculate bubble dimensions (same logic as TextBlockBackground)
+            // Note: viewTL offset is already applied via absoluteOffset modifier, so we need to add it here
+            val bgX = (block.x * 1) * zoomScale + viewTL.x
+            val bgY = (block.y * 1) * zoomScale + viewTL.y
+            val bgWidth = block.width * zoomScale
+            val bgHeight = block.height * zoomScale
+
+            // Create bounding rectangle
+            val bounds = RectF(
+                bgX,
+                bgY,
+                bgX + bgWidth,
+                bgY + bgHeight,
+            )
+
+            bubbleBounds.add(Pair(index, bounds))
         }
     }
 

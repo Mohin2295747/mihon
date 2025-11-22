@@ -1,7 +1,9 @@
 package eu.kanade.translation.presentation
 
 import android.content.Context
+import android.graphics.RectF
 import android.util.AttributeSet
+import android.view.MotionEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -67,6 +69,41 @@ class WebtoonTranslationsView :
     // Callback for when a translation block is deleted
     var onBlockDelete: ((Int) -> Unit)? = null
 
+    // Track bubble bounds for touch hit-testing
+    private val bubbleBounds = mutableListOf<Pair<Int, RectF>>()
+    private var currentScaleFactor: Float = 1f
+
+    // Override touch events to intercept clicks on translation bubbles
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        // Only handle ACTION_UP (tap completion) to match clickable behavior
+        if (event.actionMasked == MotionEvent.ACTION_UP && onBlockDelete != null) {
+            val x = event.x
+            val y = event.y
+
+            // Check if touch is within any bubble bounds
+            for ((index, bounds) in bubbleBounds) {
+                if (bounds.contains(x, y)) {
+                    // Manually trigger the compose click callback
+                    post {
+                        // Trigger menu display by invoking the stored callback
+                        performBubbleClick(index)
+                    }
+                    return true // Consume event to prevent RecyclerView navigation
+                }
+            }
+        }
+
+        // Not on a bubble, let parent handle navigation
+        return super.onTouchEvent(event)
+    }
+
+    // Callback reference to trigger menu display
+    private var bubbleClickCallback: ((Int) -> Unit)? = null
+
+    private fun performBubbleClick(index: Int) {
+        bubbleClickCallback?.invoke(index)
+    }
+
     @Composable
     override fun Content() {
         var size by remember { mutableStateOf(IntSize.Zero) }
@@ -89,6 +126,17 @@ class WebtoonTranslationsView :
         ) {
             if (size == IntSize.Zero) return
             val scaleFactor = size.width / translation.imgWidth
+            currentScaleFactor = scaleFactor
+
+            // Calculate bubble bounds for hit-testing
+            calculateBubbleBounds(scaleFactor)
+
+            // Store click callback for touch event interception
+            bubbleClickCallback = { index ->
+                selectedBlockIndex = index
+                showMenu = true
+            }
+
             TextBlockBackground(scaleFactor)
             TextBlockContent(scaleFactor) { index ->
                 selectedBlockIndex = index
@@ -168,6 +216,32 @@ class WebtoonTranslationsView :
                     null
                 },
             )
+        }
+    }
+
+    /**
+     * Calculate screen bounds for all translation bubbles to enable touch hit-testing.
+     * Uses the same positioning logic as SmartTranslationBlock to ensure accuracy.
+     */
+    private fun calculateBubbleBounds(scaleFactor: Float) {
+        bubbleBounds.clear()
+
+        translation.blocks.forEachIndexed { index, block ->
+            // Calculate bubble dimensions (same logic as SmartTranslationBlock)
+            val xPx = block.x * scaleFactor
+            val yPx = block.y * scaleFactor
+            val widthPx = block.width * scaleFactor
+            val heightPx = block.height * scaleFactor
+
+            // Create bounding rectangle
+            val bounds = RectF(
+                xPx,
+                yPx,
+                xPx + widthPx,
+                yPx + heightPx,
+            )
+
+            bubbleBounds.add(Pair(index, bounds))
         }
     }
 
