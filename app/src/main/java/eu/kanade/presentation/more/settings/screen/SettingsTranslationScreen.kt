@@ -2,6 +2,7 @@ package eu.kanade.presentation.more.settings.screen
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.translation.data.TranslationFont
@@ -13,6 +14,7 @@ import kotlinx.collections.immutable.toImmutableMap
 import tachiyomi.domain.translation.TranslationPreferences
 import tachiyomi.i18n.at.ATMR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -25,6 +27,11 @@ object SettingsTranslationScreen : SearchableSettings {
     override fun getPreferences(): List<Preference> {
         val entries = TranslationFont.entries
         val translationPreferences = remember { Injekt.get<TranslationPreferences>() }
+
+        // Collect margin preference state
+        val marginPref = translationPreferences.translationTextMargin()
+        val margin by marginPref.collectAsState()
+
         return listOf(
             Preference.PreferenceItem.SwitchPreference(
                 pref = translationPreferences.autoTranslateAfterDownload(),
@@ -34,6 +41,17 @@ object SettingsTranslationScreen : SearchableSettings {
                 pref = translationPreferences.translationFont(),
                 title = stringResource(ATMR.strings.pref_reader_font),
                 entries = entries.withIndex().associate { it.index to it.value.label }.toImmutableMap(),
+            ),
+            Preference.PreferenceItem.SliderPreference(
+                value = margin,
+                min = 0,
+                max = 8,
+                title = "Translation Text Margin",
+                subtitle = "Spacing from bubble edges: ${margin}px",
+                onValueChanged = {
+                    marginPref.set(it)
+                    true
+                },
             ),
             getTranslationLangGroup(translationPreferences),
             getTranslatioEngineGroup(translationPreferences),

@@ -1,5 +1,6 @@
 package eu.kanade.translation.presentation
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.requiredSize
@@ -24,7 +25,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.translation.model.BubbleShape
 import eu.kanade.translation.model.TranslationBlock
+import logcat.LogPriority
 import logcat.logcat
+import tachiyomi.domain.translation.TranslationPreferences
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import kotlin.math.max
 
 // Smart bubble sizing constants
@@ -150,6 +155,11 @@ fun SmartTranslationBlock(
             .requiredSize(calculatedDimensions.width, calculatedDimensions.height),
     ) {
         val density = LocalDensity.current
+
+        // Get user-configurable text margin preference (0-8px)
+        val translationPreferences = remember { Injekt.get<TranslationPreferences>() }
+        val userMarginPx = translationPreferences.translationTextMargin().get()
+
         SubcomposeLayout { constraints ->
             // Detect bubble shape for adaptive text constraints
             val bubbleShape = block.detectShape()
@@ -207,14 +217,32 @@ fun SmartTranslationBlock(
 
             val maxWidthPx = with(density) {
                 ((calculatedDimensions.width.roundToPx() - totalHorizontalPadding) * widthMargin).toInt()
+                    .coerceAtLeast(0)  // Prevent negative values
             }
             val maxHeightPx = with(density) {
                 ((calculatedDimensions.height.roundToPx() - totalVerticalPadding) * heightMargin).toInt()
                     .coerceAtLeast(0)  // Prevent negative values
             }
 
-            // Calculate actual constrained width for text layout (with padding applied)
-            val constrainedWidthDp = with(density) { maxWidthPx.toDp() }
+            // Apply user-configurable margin to create inset spacing from bubble edges
+            // Margin is applied on all sides (2x for width and height)
+            val finalMaxWidthPx = (maxWidthPx - userMarginPx * 2).coerceAtLeast(0)
+            val finalMaxHeightPx = (maxHeightPx - userMarginPx * 2).coerceAtLeast(0)
+
+            // Calculate actual constrained width for text layout (with padding and margin applied)
+            val constrainedWidthDp = with(density) { finalMaxWidthPx.toDp() }
+
+            // Safety check: If text area is too small, skip rendering to prevent crashes
+            val minTextAreaWidth = 30
+            val minTextAreaHeight = 20
+            if (finalMaxWidthPx < minTextAreaWidth || finalMaxHeightPx < minTextAreaHeight) {
+                logcat(LogPriority.WARN) {
+                    "SmartTranslationBlock: Bubble too small to render text (${finalMaxWidthPx}x${finalMaxHeightPx}px). " +
+                    "Skipping translation for text: '${block.translation.take(30)}...'"
+                }
+                // Return empty layout to prevent constraint crashes
+                return@SubcomposeLayout layout(constraints.maxWidth, constraints.maxHeight) {}
+            }
 
             // Binary search for optimal font size with minimum threshold
             // Cap maximum font size to 12dp for all languages for consistency
@@ -233,16 +261,16 @@ fun SmartTranslationBlock(
                         color = Color.Black,
                         overflow = TextOverflow.Clip,
                         textAlign = TextAlign.Justify,
-                        maxLines = calculateMaxLines(maxHeightPx, mid, isKoreanToEnglish),
+                        maxLines = calculateMaxLines(finalMaxHeightPx, mid, isKoreanToEnglish),
                         softWrap = true,
                         modifier = Modifier
                             .width(constrainedWidthDp)
                             .rotate(if (isVertical) 0f else block.angle)
                             .align(Alignment.Center),
                     )
-                }[0].measure(Constraints(maxWidth = maxWidthPx))
+                }[0].measure(Constraints(maxWidth = finalMaxWidthPx))
 
-                if (textLayoutResult.height <= maxHeightPx && textLayoutResult.width <= maxWidthPx) {
+                if (textLayoutResult.height <= finalMaxHeightPx && textLayoutResult.width <= finalMaxWidthPx) {
                     bestSize = mid
                     low = mid + 1
                 } else {
@@ -253,22 +281,29 @@ fun SmartTranslationBlock(
             val finalFontSize = bestSize.coerceAtLeast(MIN_FONT_SIZE.toInt()).sp
 
             // Measure final layout with constrained width to prevent horizontal clipping
+            // Wrap text in Box with white background to ensure visibility on any manga page color
             val textPlaceable = subcompose(Unit) {
-                Text(
-                    text = block.translation,
-                    fontSize = finalFontSize,
-                    fontFamily = fontFamily,
-                    color = Color.Black,
-                    softWrap = true,
-                    overflow = TextOverflow.Clip,
-                    textAlign = TextAlign.Justify,
-                    maxLines = calculateMaxLines(maxHeightPx, bestSize, isKoreanToEnglish),
+                Box(
                     modifier = Modifier
-                        .width(constrainedWidthDp)
-                        .rotate(if (isVertical) 0f else block.angle)
-                        .align(Alignment.Center),
-                )
-            }[0].measure(Constraints(maxWidth = maxWidthPx, maxHeight = maxHeightPx))
+                        .background(Color.White.copy(alpha = 0.9f)) // Semi-transparent white background
+                        .wrapContentSize()
+                ) {
+                    Text(
+                        text = block.translation,
+                        fontSize = finalFontSize,
+                        fontFamily = fontFamily,
+                        color = Color.Black,
+                        softWrap = true,
+                        overflow = TextOverflow.Clip,
+                        textAlign = TextAlign.Justify,
+                        maxLines = calculateMaxLines(finalMaxHeightPx, bestSize, isKoreanToEnglish),
+                        modifier = Modifier
+                            .width(constrainedWidthDp)
+                            .rotate(if (isVertical) 0f else block.angle)
+                            .align(Alignment.Center),
+                    )
+                }
+            }[0].measure(Constraints(maxWidth = finalMaxWidthPx, maxHeight = finalMaxHeightPx))
 
             // Use full available space for layout to prevent clipping
             // This allows text to render in the entire bubble area

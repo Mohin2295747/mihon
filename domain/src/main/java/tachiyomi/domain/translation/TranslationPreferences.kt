@@ -10,6 +10,7 @@ class TranslationPreferences(
     fun translateFromLanguage() = preferenceStore.getString("translate_language_from", "AUTO_DETECT")
     fun translateToLanguage() = preferenceStore.getString("translate_language_to", "ENGLISH")
     fun translationFont() = preferenceStore.getInt("translation_font", 0)
+    fun translationTextMargin() = preferenceStore.getInt("translation_text_margin", 2)
 
     fun translationEngine() = preferenceStore.getInt("translation_engine", 0)
     fun translationEngineModel() = preferenceStore.getString("translation_engine_model", "gemini-2.5-flash")
