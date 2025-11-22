@@ -224,19 +224,30 @@ class PagerTranslationsView :
 
     /**
      * Calculate screen bounds for all translation bubbles to enable touch hit-testing.
-     * Uses the same positioning logic as TextBlockBackground to ensure accuracy.
-     * Accounts for zoom scale and view offset (pan).
+     * MUST match SmartTranslationBlock and TextBlockBackground positioning EXACTLY.
+     * Accounts for zoom scale, view offset (pan), language-specific padding, and dimension expansion.
      */
     private fun calculateBubbleBounds(zoomScale: Float, viewTL: PointF) {
         bubbleBounds.clear()
 
         translation.blocks.forEachIndexed { index, block ->
-            // Calculate bubble dimensions (same logic as TextBlockBackground)
-            // Note: viewTL offset is already applied via absoluteOffset modifier, so we need to add it here
-            val bgX = (block.x * 1) * zoomScale + viewTL.x
-            val bgY = (block.y * 1) * zoomScale + viewTL.y
-            val bgWidth = block.width * zoomScale
-            val bgHeight = block.height * zoomScale
+            // Language-specific padding multipliers (matches SmartTranslationBlock)
+            val paddingMultiplier = when (translation.sourceLanguage) {
+                "ko", "korean" -> 1.15f
+                "ja", "japanese" -> 1.2f
+                else -> 1.0f
+            }
+
+            // Calculate padding (matches SmartTranslationBlock logic)
+            val padX = (block.symWidth * 2) * paddingMultiplier
+            val padY = block.symHeight * paddingMultiplier
+
+            // Calculate bubble dimensions with padding offset (same logic as TextBlockBackground)
+            // Note: viewTL offset is applied to account for pan/zoom
+            val bgX = ((block.x - padX / 2) * 1) * zoomScale + viewTL.x
+            val bgY = ((block.y - padY / 2) * 1) * zoomScale + viewTL.y
+            val bgWidth = (block.width + padX) * zoomScale
+            val bgHeight = (block.height + padY) * zoomScale
 
             // Create bounding rectangle
             val bounds = RectF(

@@ -339,26 +339,57 @@ class WebtoonPageHolder(
         translationsView = WebtoonTranslationsView(context, translation = page!!.translation!!, font = font).apply {
             // Wire up deletion callback for interactive bubble deletion
             onBlockDelete = { blockIndex ->
-                // Remove block from in-memory translation data
-                page?.translation?.blocks?.removeAt(blockIndex)
+                scope.launch {
+                    try {
+                        val translationManager = Injekt.get<TranslationManager>()
+                        val manga = viewer.activity.viewModel.manga
+                        val source = viewer.activity.viewModel.getSource()
+                        val currentPage = page
 
-                // Persist deletion to JSON file
-                val translationManager = Injekt.get<TranslationManager>()
-                val manga = viewer.activity.viewModel.manga
-                val source = viewer.activity.viewModel.getSource()
+                        if (manga != null && source != null && currentPage != null) {
+                            // 1. Persist deletion to JSON file FIRST
+                            val success = withIOContext {
+                                translationManager.deleteTranslationBlock(
+                                    chapter = currentPage.chapter.chapter,
+                                    manga = manga,
+                                    source = source,
+                                    pageFileName = "page_${currentPage.index}",
+                                    blockIndex = blockIndex,
+                                )
+                            }
 
-                if (manga != null && source != null && page != null) {
-                    translationManager.deleteTranslationBlock(
-                        chapter = page!!.chapter.chapter,
-                        manga = manga,
-                        source = source,
-                        pageFileName = "page_${page!!.index}",
-                        blockIndex = blockIndex,
-                    )
+                            if (success) {
+                                logcat { "Successfully deleted translation block $blockIndex from page ${currentPage.index}" }
+
+                                // 2. Reload translation from disk to get fresh data
+                                val updatedTranslations = withIOContext {
+                                    translationManager.getChapterTranslation(
+                                        chapterName = currentPage.chapter.chapter.name,
+                                        scanlator = currentPage.chapter.chapter.scanlator,
+                                        title = manga.title,
+                                        source = source,
+                                    )
+                                }
+
+                                withUIContext {
+                                    // 3. Update in-memory data with fresh data from disk
+                                    currentPage.translation = updatedTranslations["page_${currentPage.index}"]
+
+                                    // 4. Refresh view to show updated bubbles
+                                    addTranslationsView()
+                                }
+                            } else {
+                                logcat(LogPriority.ERROR) {
+                                    "Failed to delete translation block $blockIndex from page ${currentPage.index} - file operation failed"
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        logcat(LogPriority.ERROR) {
+                            "Error deleting translation block: ${e.message}\n${e.stackTraceToString()}"
+                        }
+                    }
                 }
-
-                // Refresh view to show updated bubbles
-                addTranslationsView()
             }
         }
         if (!showTranslations) translationsView?.hide()

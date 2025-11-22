@@ -17,7 +17,9 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
 import kotlinx.serialization.json.encodeToStream
+import logcat.LogPriority
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.manga.model.Manga
 import eu.kanade.tachiyomi.data.database.models.Chapter as DbChapter
@@ -147,7 +149,10 @@ class TranslationManager(
     ): Boolean {
         try {
             val file = provider.findTranslationFile(chapter.name, chapter.scanlator, manga.title, source)
-                ?: return false
+            if (file == null) {
+                logcat(LogPriority.ERROR) { "deleteTranslationBlock: Translation file not found for chapter '${chapter.name}'" }
+                return false
+            }
 
             // Load current translations
             val translations = Json.decodeFromStream<MutableMap<String, PageTranslation>>(
@@ -155,18 +160,31 @@ class TranslationManager(
             ).toMutableMap()
 
             // Remove the specific block from the page
-            val pageTranslation = translations[pageFileName] ?: return false
-            if (blockIndex < 0 || blockIndex >= pageTranslation.blocks.size) return false
+            val pageTranslation = translations[pageFileName]
+            if (pageTranslation == null) {
+                logcat(LogPriority.ERROR) { "deleteTranslationBlock: Page '$pageFileName' not found in translation file" }
+                return false
+            }
 
+            if (blockIndex < 0 || blockIndex >= pageTranslation.blocks.size) {
+                logcat(LogPriority.ERROR) {
+                    "deleteTranslationBlock: Invalid blockIndex $blockIndex (valid range: 0-${pageTranslation.blocks.size - 1})"
+                }
+                return false
+            }
+
+            logcat { "deleteTranslationBlock: Removing block $blockIndex from page '$pageFileName'" }
             pageTranslation.blocks.removeAt(blockIndex)
 
             // If no blocks left on this page, remove the page entry entirely
             if (pageTranslation.blocks.isEmpty()) {
+                logcat { "deleteTranslationBlock: No blocks left on page '$pageFileName', removing page entry" }
                 translations.remove(pageFileName)
             }
 
             // If no pages left in the translation, delete the entire file
             if (translations.isEmpty()) {
+                logcat { "deleteTranslationBlock: No pages left in translation file, deleting file" }
                 file.delete()
                 return true
             }
@@ -176,8 +194,12 @@ class TranslationManager(
                 Json.encodeToStream(translations, stream)
             }
 
+            logcat { "deleteTranslationBlock: Successfully persisted deletion to file" }
             return true
         } catch (e: Exception) {
+            logcat(LogPriority.ERROR) {
+                "deleteTranslationBlock: Exception occurred: ${e.message}\n${e.stackTraceToString()}"
+            }
             return false
         }
     }
@@ -194,7 +216,10 @@ class TranslationManager(
     ): Boolean {
         try {
             val file = provider.findTranslationFile(chapter.name, chapter.scanlator, manga.title, source)
-                ?: return false
+            if (file == null) {
+                logcat(LogPriority.ERROR) { "deleteTranslationBlock: Translation file not found for chapter '${chapter.name}'" }
+                return false
+            }
 
             // Load current translations
             val translations = Json.decodeFromStream<MutableMap<String, PageTranslation>>(
@@ -202,18 +227,31 @@ class TranslationManager(
             ).toMutableMap()
 
             // Remove the specific block from the page
-            val pageTranslation = translations[pageFileName] ?: return false
-            if (blockIndex < 0 || blockIndex >= pageTranslation.blocks.size) return false
+            val pageTranslation = translations[pageFileName]
+            if (pageTranslation == null) {
+                logcat(LogPriority.ERROR) { "deleteTranslationBlock: Page '$pageFileName' not found in translation file" }
+                return false
+            }
 
+            if (blockIndex < 0 || blockIndex >= pageTranslation.blocks.size) {
+                logcat(LogPriority.ERROR) {
+                    "deleteTranslationBlock: Invalid blockIndex $blockIndex (valid range: 0-${pageTranslation.blocks.size - 1})"
+                }
+                return false
+            }
+
+            logcat { "deleteTranslationBlock: Removing block $blockIndex from page '$pageFileName'" }
             pageTranslation.blocks.removeAt(blockIndex)
 
             // If no blocks left on this page, remove the page entry entirely
             if (pageTranslation.blocks.isEmpty()) {
+                logcat { "deleteTranslationBlock: No blocks left on page '$pageFileName', removing page entry" }
                 translations.remove(pageFileName)
             }
 
             // If no pages left in the translation, delete the entire file
             if (translations.isEmpty()) {
+                logcat { "deleteTranslationBlock: No pages left in translation file, deleting file" }
                 file.delete()
                 return true
             }
@@ -223,8 +261,12 @@ class TranslationManager(
                 Json.encodeToStream(translations, stream)
             }
 
+            logcat { "deleteTranslationBlock: Successfully persisted deletion to file" }
             return true
         } catch (e: Exception) {
+            logcat(LogPriority.ERROR) {
+                "deleteTranslationBlock: Exception occurred: ${e.message}\n${e.stackTraceToString()}"
+            }
             return false
         }
     }

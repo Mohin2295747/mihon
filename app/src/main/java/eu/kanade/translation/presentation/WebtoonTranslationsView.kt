@@ -221,17 +221,32 @@ class WebtoonTranslationsView :
 
     /**
      * Calculate screen bounds for all translation bubbles to enable touch hit-testing.
-     * Uses the same positioning logic as SmartTranslationBlock to ensure accuracy.
+     * MUST match SmartTranslationBlock positioning EXACTLY to ensure accurate hit detection.
+     * This includes language-specific padding, offsets, and dimension expansion.
      */
     private fun calculateBubbleBounds(scaleFactor: Float) {
         bubbleBounds.clear()
 
         translation.blocks.forEachIndexed { index, block ->
-            // Calculate bubble dimensions (same logic as SmartTranslationBlock)
-            val xPx = block.x * scaleFactor
-            val yPx = block.y * scaleFactor
-            val widthPx = block.width * scaleFactor
-            val heightPx = block.height * scaleFactor
+            // Language-specific padding multipliers (matches SmartTranslationBlock)
+            val paddingMultiplier = when (translation.sourceLanguage) {
+                "ko", "korean" -> 1.15f
+                "ja", "japanese" -> 1.2f
+                else -> 1.0f
+            }
+
+            // Calculate padding (matches SmartTranslationBlock logic)
+            val padX = (block.symWidth * 2) * paddingMultiplier
+            val padY = block.symHeight * paddingMultiplier
+
+            // Calculate position with padding offset (matches SmartTranslationBlock)
+            // Using max(..., 0.0f) to prevent negative coordinates
+            val xPx = kotlin.math.max((block.x - padX / 2) * scaleFactor, 0.0f)
+            val yPx = kotlin.math.max((block.y - padY / 2) * scaleFactor, 0.0f)
+
+            // Calculate dimensions with padding (matches TextBlockBackground)
+            val widthPx = (block.width + padX) * scaleFactor
+            val heightPx = (block.height + padY) * scaleFactor
 
             // Create bounding rectangle
             val bounds = RectF(
