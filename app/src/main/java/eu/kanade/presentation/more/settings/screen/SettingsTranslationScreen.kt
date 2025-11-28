@@ -28,10 +28,6 @@ object SettingsTranslationScreen : SearchableSettings {
         val entries = TranslationFont.entries
         val translationPreferences = remember { Injekt.get<TranslationPreferences>() }
 
-        // Collect margin preference state
-        val marginPref = translationPreferences.translationTextMargin()
-        val margin by marginPref.collectAsState()
-
         return listOf(
             Preference.PreferenceItem.SwitchPreference(
                 pref = translationPreferences.autoTranslateAfterDownload(),
@@ -42,19 +38,10 @@ object SettingsTranslationScreen : SearchableSettings {
                 title = stringResource(ATMR.strings.pref_reader_font),
                 entries = entries.withIndex().associate { it.index to it.value.label }.toImmutableMap(),
             ),
-            Preference.PreferenceItem.SliderPreference(
-                value = margin,
-                min = 0,
-                max = 8,
-                title = "Translation Text Margin",
-                subtitle = "Spacing from bubble edges: ${margin}px",
-                onValueChanged = {
-                    marginPref.set(it)
-                    true
-                },
-            ),
             getTranslationLangGroup(translationPreferences),
             getTranslatioEngineGroup(translationPreferences),
+            getCJKDisplayGroup(translationPreferences),
+            getLatinDisplayGroup(translationPreferences),
             getTranslatioAdvancedGroup(translationPreferences),
         )
     }
@@ -126,6 +113,137 @@ object SettingsTranslationScreen : SearchableSettings {
                 Preference.PreferenceItem.EditTextPreference(
                     pref = translationPreferences.translationEngineMaxOutputTokens(),
                     title = stringResource(ATMR.strings.pref_engine_max_output),
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getCJKDisplayGroup(
+        translationPreferences: TranslationPreferences,
+    ): Preference.PreferenceGroup {
+        // CJK Text Margin (0-8px)
+        val cjkMarginPref = translationPreferences.cjkTextMargin()
+        val cjkMargin by cjkMarginPref.collectAsState()
+
+        // CJK Padding Multiplier (100-150%)
+        val cjkPaddingPref = translationPreferences.cjkPaddingMultiplier()
+        val cjkPadding by cjkPaddingPref.collectAsState()
+
+        // CJK Oval Height Margin (50-95%)
+        val cjkOvalHeightPref = translationPreferences.cjkOvalHeightMargin()
+        val cjkOvalHeight by cjkOvalHeightPref.collectAsState()
+
+        return Preference.PreferenceGroup(
+            title = "CJK Display (Korean/Japanese/Chinese)",
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.SliderPreference(
+                    value = cjkMargin,
+                    min = 0,
+                    max = 8,
+                    title = "Text Margin",
+                    subtitle = "Spacing from bubble edges: ${cjkMargin}px",
+                    onValueChanged = {
+                        cjkMarginPref.set(it)
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.SliderPreference(
+                    value = cjkPadding,
+                    min = 100,
+                    max = 150,
+                    title = "Padding Multiplier",
+                    subtitle = "Symbol padding: ${cjkPadding}%",
+                    onValueChanged = {
+                        cjkPaddingPref.set(it)
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.SliderPreference(
+                    value = cjkOvalHeight,
+                    min = 50,
+                    max = 95,
+                    title = "Oval Height Usage",
+                    subtitle = "Text area: ${cjkOvalHeight}% of bubble height",
+                    onValueChanged = {
+                        cjkOvalHeightPref.set(it)
+                        true
+                    },
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getLatinDisplayGroup(
+        translationPreferences: TranslationPreferences,
+    ): Preference.PreferenceGroup {
+        // Latin Text Margin (0-8px)
+        val latinMarginPref = translationPreferences.latinTextMargin()
+        val latinMargin by latinMarginPref.collectAsState()
+
+        // Latin Padding Multiplier (100-150%)
+        val latinPaddingPref = translationPreferences.latinPaddingMultiplier()
+        val latinPadding by latinPaddingPref.collectAsState()
+
+        // Latin Oval Height Margin (70-99%)
+        val latinOvalHeightPref = translationPreferences.latinOvalHeightMargin()
+        val latinOvalHeight by latinOvalHeightPref.collectAsState()
+
+        // Latin Horizontal Padding (2-12dp)
+        val latinHorizontalPaddingPref = translationPreferences.latinHorizontalPadding()
+        val latinHorizontalPadding by latinHorizontalPaddingPref.collectAsState()
+
+        // Latin Vertical Padding (2-10dp)
+        val latinVerticalPaddingPref = translationPreferences.latinVerticalPadding()
+        val latinVerticalPadding by latinVerticalPaddingPref.collectAsState()
+
+        return Preference.PreferenceGroup(
+            title = "Latin Display (Spanish/Indonesian)",
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.SliderPreference(
+                    value = latinMargin,
+                    min = 0,
+                    max = 8,
+                    title = "Text Margin",
+                    subtitle = "Spacing from bubble edges: ${latinMargin}px",
+                    onValueChanged = {
+                        latinMarginPref.set(it)
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.SliderPreference(
+                    value = latinOvalHeight,
+                    min = 70,
+                    max = 99,
+                    title = "Oval Height Usage",
+                    subtitle = "Text area: ${latinOvalHeight}% of bubble height",
+                    onValueChanged = {
+                        latinOvalHeightPref.set(it)
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.SliderPreference(
+                    value = latinHorizontalPadding,
+                    min = 2,
+                    max = 12,
+                    title = "Horizontal Padding",
+                    subtitle = "Left/right padding: ${latinHorizontalPadding}dp",
+                    onValueChanged = {
+                        latinHorizontalPaddingPref.set(it)
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.SliderPreference(
+                    value = latinVerticalPadding,
+                    min = 2,
+                    max = 10,
+                    title = "Vertical Padding",
+                    subtitle = "Top/bottom padding: ${latinVerticalPadding}dp",
+                    onValueChanged = {
+                        latinVerticalPaddingPref.set(it)
+                        true
+                    },
                 ),
             ),
         )

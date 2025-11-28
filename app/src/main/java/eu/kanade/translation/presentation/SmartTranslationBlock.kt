@@ -34,54 +34,67 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import kotlin.math.max
 
-// Smart bubble sizing constants
+// ============================================================================
+// CJK Constants (preserved from original - DO NOT CHANGE)
+// ============================================================================
 private const val MIN_FONT_SIZE = 12f
-private const val DEFAULT_FONT_SIZE = 16f
-private const val CJK_MAX_FONT_SIZE = 12f // Cap for Korean/Japanese/Chinese translations to prevent oversized fonts
+private const val CJK_MAX_FONT_SIZE = 12f
+
+// CJK Bubble expansion
 private const val BUBBLE_EXPANSION_RATIO = 1.2f
 private const val MAX_BUBBLE_EXPANSION = 1.5f
-
-// Edge padding to prevent text touching bubble boundaries
-// Different padding for different bubble shapes
-private const val HORIZONTAL_PADDING_DP = 8 // Left/right inset for rectangles
-private const val VERTICAL_PADDING_DP = 2 // Top/bottom inset for rectangles (reduced for better vertical space)
-private const val OVAL_VERTICAL_PADDING_DP = 10 // Increased vertical padding for horizontal ovals to avoid curved edges
-private const val OVAL_HORIZONTAL_PADDING_DP = 4 // Reduced horizontal padding for vertical ovals
-
-// HARD WIDTH CONSTRAINT: 90% rule to prevent horizontal overflow
-// If bubble width is 200px, text uses max 180px per line (90%)
-private const val HARD_WIDTH_CONSTRAINT = 0.90f // 90% of bubble width - STRICT to prevent overflow
-
-// Safety margins for text area calculation after applying hard constraint
-// Rectangles: Use most of available space
-private const val WIDTH_SAFETY_MARGIN = 0.98f // Use 98% of constrained width (was 95%, increased since we have hard constraint)
-private const val HEIGHT_SAFETY_MARGIN = 0.99f // Use 99% of available height
-
-// Horizontal ovals (Korean common case): Reduce vertical area to avoid curved top/bottom edges
-private const val OVAL_WIDTH_SAFETY_MARGIN = 0.98f // Keep 98% width (was 95%, increased with hard constraint)
-private const val OVAL_HEIGHT_SAFETY_MARGIN = 0.70f // Use only 70% of height (avoid top/bottom curves) - CRITICAL for Korean ovals
-
-// Non-CJK horizontal oval margin (Spanish/Indonesian -> English)
-private const val NON_CJK_OVAL_HEIGHT_SAFETY_MARGIN = 0.85f // Use 85% of height (more space than Korean 70%)
-
-// Vertical ovals: Reduce horizontal area to avoid curved left/right edges
-private const val VERTICAL_OVAL_WIDTH_SAFETY_MARGIN = 0.70f // Use only 70% width (avoid left/right curves)
-private const val VERTICAL_OVAL_HEIGHT_SAFETY_MARGIN = 0.95f // Keep 95% height
 
 // Korean -> English specific constants
 private const val KOREAN_TO_ENGLISH_MIN_EXPANSION = 1.8f
 private const val KOREAN_TO_ENGLISH_MAX_EXPANSION = 2.5f
-private const val KOREAN_LINE_HEIGHT_MULTIPLIER = 1.4f // Reduced from 1.7f to pack lines closer and utilize vertical space better
-private const val GENERIC_LINE_HEIGHT_MULTIPLIER = 1.3f // Reduced from 1.5f for better vertical space utilization
+private const val KOREAN_LINE_HEIGHT_MULTIPLIER = 1.4f
 
 // Cloud Translation specific constants (longer translations)
 private const val CLOUD_KOREAN_TO_ENGLISH_MIN_EXPANSION = 2.2f
 private const val CLOUD_KOREAN_TO_ENGLISH_MAX_EXPANSION = 3.0f
 private const val CLOUD_TRANSLATION_EXPANSION_MULTIPLIER = 1.15f
 
-// Spanish/Indonesian -> English specific constants
-// These languages produce moderately longer English text (not as extreme as Korean)
-private const val NON_CJK_TO_ENGLISH_EXPANSION = 1.4f
+// CJK Padding constants
+private const val CJK_HORIZONTAL_PADDING_DP = 8
+private const val CJK_VERTICAL_PADDING_DP = 2
+private const val CJK_OVAL_VERTICAL_PADDING_DP = 10
+private const val CJK_OVAL_HORIZONTAL_PADDING_DP = 4
+
+// CJK Safety margins
+private const val CJK_WIDTH_SAFETY_MARGIN = 0.98f
+private const val CJK_HEIGHT_SAFETY_MARGIN = 0.99f
+private const val CJK_OVAL_WIDTH_SAFETY_MARGIN = 0.98f
+private const val CJK_OVAL_HEIGHT_SAFETY_MARGIN = 0.70f
+private const val CJK_VERTICAL_OVAL_WIDTH_SAFETY_MARGIN = 0.70f
+private const val CJK_VERTICAL_OVAL_HEIGHT_SAFETY_MARGIN = 0.95f
+
+// ============================================================================
+// Latin Constants (new values for Spanish/Indonesian)
+// ============================================================================
+private const val LATIN_LINE_HEIGHT_MULTIPLIER = 1.2f // Tighter line height
+
+// Latin Padding constants (more generous)
+private const val LATIN_HORIZONTAL_PADDING_DP = 6
+private const val LATIN_VERTICAL_PADDING_DP = 4
+private const val LATIN_OVAL_VERTICAL_PADDING_DP = 6
+private const val LATIN_OVAL_HORIZONTAL_PADDING_DP = 4
+
+// Latin Safety margins (more generous to prevent clipping)
+private const val LATIN_WIDTH_SAFETY_MARGIN = 0.98f
+private const val LATIN_HEIGHT_SAFETY_MARGIN = 0.99f
+private const val LATIN_OVAL_WIDTH_SAFETY_MARGIN = 0.98f
+private const val LATIN_OVAL_HEIGHT_SAFETY_MARGIN = 0.95f // Much more generous than CJK 70%
+private const val LATIN_VERTICAL_OVAL_WIDTH_SAFETY_MARGIN = 0.75f
+private const val LATIN_VERTICAL_OVAL_HEIGHT_SAFETY_MARGIN = 0.95f
+
+// Latin Expansion (hybrid overflow)
+private const val LATIN_MAX_EXPANSION = 1.3f
+private const val LATIN_MIN_FONT_SIZE = 10 // Can reduce to 10dp as fallback
+
+// ============================================================================
+// Common Constants
+// ============================================================================
+private const val HARD_WIDTH_CONSTRAINT = 0.90f // 90% of bubble width
 
 /**
  * Helper data class for shape-specific padding and margin configurations
@@ -99,18 +112,47 @@ fun SmartTranslationBlock(
     block: TranslationBlock,
     scaleFactor: Float,
     fontFamily: FontFamily,
-    sourceLanguage: String = "auto", // Source language detected by OCR
-    targetLanguage: String = "en", // Target language for translation
-    translatorType: String = "gemini", // Translator engine type (cloud, gemini, etc.)
-    onBlockClick: (() -> Unit)? = null, // Callback when bubble is clicked
+    sourceLanguage: String = "auto",
+    targetLanguage: String = "en",
+    translatorType: String = "gemini",
+    onBlockClick: (() -> Unit)? = null,
 ) {
-    // Language-specific padding multipliers to prevent text overlap
-    val paddingMultiplier = when (sourceLanguage) {
-        "ko", "korean" -> 1.15f // Reduced from 1.5f to prevent oversized bubbles and fonts
-        "ja", "japanese" -> 1.2f // Japanese with Kanji also benefits from extra padding
-        else -> 1.0f
+    // Determine language module based on source language
+    val languageModule = remember(sourceLanguage) {
+        LanguageRenderModule.fromSourceLanguage(sourceLanguage)
     }
 
+    // Get preferences
+    val translationPreferences = remember { Injekt.get<TranslationPreferences>() }
+
+    // Get module-specific settings from preferences
+    val (userMarginPx, paddingMultiplier, ovalHeightMargin) = remember(languageModule) {
+        when (languageModule) {
+            is LanguageRenderModule.CJKModule -> Triple(
+                translationPreferences.cjkTextMargin().get(),
+                translationPreferences.cjkPaddingMultiplier().get() / 100f,
+                translationPreferences.cjkOvalHeightMargin().get() / 100f
+            )
+            is LanguageRenderModule.LatinModule -> Triple(
+                translationPreferences.latinTextMargin().get(),
+                translationPreferences.latinPaddingMultiplier().get() / 100f,
+                translationPreferences.latinOvalHeightMargin().get() / 100f
+            )
+        }
+    }
+
+    // Get Latin-specific padding overrides if applicable
+    val (latinHorizontalPadding, latinVerticalPadding) = remember(languageModule) {
+        when (languageModule) {
+            is LanguageRenderModule.LatinModule -> Pair(
+                translationPreferences.latinHorizontalPadding().get(),
+                translationPreferences.latinVerticalPadding().get()
+            )
+            else -> Pair(LATIN_HORIZONTAL_PADDING_DP, LATIN_VERTICAL_PADDING_DP)
+        }
+    }
+
+    // Apply padding multiplier to calculate symbol padding
     val padX = (block.symWidth * 2) * paddingMultiplier
     val padY = block.symHeight * paddingMultiplier
     val xPx = max((block.x - padX / 2) * scaleFactor, 0.0f)
@@ -121,34 +163,52 @@ fun SmartTranslationBlock(
     val rawHeight = ((block.height + padY) * scaleFactor).pxToDp()
     val isVertical = block.angle > 85
 
-    // Detect Korean -> English translation pair
-    val isKoreanToEnglish = isKoreanToEnglishTranslation(sourceLanguage, targetLanguage)
+    // Detect language-specific translation pairs
+    val isKoreanToEnglish = LanguageRenderModule.isKoreanToEnglish(sourceLanguage, targetLanguage)
+    val isCJK = languageModule is LanguageRenderModule.CJKModule
+    val isLatin = languageModule is LanguageRenderModule.LatinModule
 
-    // Calculate optimal dimensions with expansion (if needed for Korean->English or Spanish/Indonesian->English)
-    // Then apply HARD 90% WIDTH CONSTRAINT to final result
-    val calculatedDimensions = remember(block.translation, isKoreanToEnglish, translatorType, sourceLanguage, targetLanguage) {
-        val expandedDimensions = calculateOptimalDimensions(
-            text = block.translation,
-            originalText = block.text,
-            baseWidth = rawWidth,  // Start with full width
-            baseHeight = rawHeight,
-            fontFamily = fontFamily,
-            isKoreanToEnglish = isKoreanToEnglish,
-            translatorType = translatorType,
-            sourceLanguage = sourceLanguage,
-            targetLanguage = targetLanguage
-        )
+    // Log module selection for debugging
+    logcat(tag = "SmartTranslationBlock") {
+        "Module: ${if (isCJK) "CJK" else "Latin"}, source=$sourceLanguage, " +
+        "paddingMult=$paddingMultiplier, ovalHeight=$ovalHeightMargin"
+    }
 
-        // APPLY HARD 90% WIDTH CONSTRAINT TO FINAL EXPANDED DIMENSIONS
-        // If bubble width = 200px:
-        // - Background uses 200px (100%)
-        // - Text limited to 180px (90%) max, even after expansion
-        // This prevents text from overflowing beyond white background
-        BubbleDimensions(
-            width = minOf(expandedDimensions.width, rawWidth * HARD_WIDTH_CONSTRAINT),
-            height = expandedDimensions.height,  // No height constraint
-            expansionRatio = expandedDimensions.expansionRatio
-        )
+    // Calculate optimal dimensions with expansion
+    val calculatedDimensions = remember(
+        block.translation,
+        isKoreanToEnglish,
+        translatorType,
+        sourceLanguage,
+        targetLanguage,
+        languageModule
+    ) {
+        if (isCJK) {
+            // CJK path: Use original expansion logic
+            val expandedDimensions = calculateCJKOptimalDimensions(
+                text = block.translation,
+                originalText = block.text,
+                baseWidth = rawWidth,
+                baseHeight = rawHeight,
+                isKoreanToEnglish = isKoreanToEnglish,
+                translatorType = translatorType,
+            )
+
+            // Apply hard 90% width constraint
+            BubbleDimensions(
+                width = minOf(expandedDimensions.width, rawWidth * HARD_WIDTH_CONSTRAINT),
+                height = expandedDimensions.height,
+                expansionRatio = expandedDimensions.expansionRatio,
+                fontSize = CJK_MAX_FONT_SIZE.toInt()
+            )
+        } else {
+            // Latin path: Use hybrid overflow logic
+            calculateLatinOptimalDimensions(
+                text = block.translation,
+                baseWidth = rawWidth,
+                baseHeight = rawHeight,
+            )
+        }
     }
 
     Box(
@@ -157,7 +217,7 @@ fun SmartTranslationBlock(
                 if (onBlockClick != null) {
                     Modifier.clickable(
                         onClick = { onBlockClick() },
-                        indication = null, // No ripple effect for clean look
+                        indication = null,
                         interactionSource = remember { MutableInteractionSource() },
                     )
                 } else {
@@ -170,136 +230,93 @@ fun SmartTranslationBlock(
     ) {
         val density = LocalDensity.current
 
-        // Get user-configurable text margin preference (0-8px)
-        val translationPreferences = remember { Injekt.get<TranslationPreferences>() }
-        val userMarginPx = translationPreferences.translationTextMargin().get()
-
         SubcomposeLayout { constraints ->
-            // Detect bubble shape for adaptive text constraints
             val bubbleShape = block.detectShape()
 
-            // Get language-specific oval height margin (separate CJK vs non-CJK logic)
-            val ovalHeightMargin = getNonCJKOvalHeightMargin(sourceLanguage, targetLanguage)
-
-            // Apply shape-specific padding and safety margins
-            // Horizontal ovals: More vertical padding, reduce vertical area to avoid curves
-            //   - Korean/CJK: 70% height (very conservative)
-            //   - Spanish/Indonesian: 85% height (more space)
-            // Vertical ovals: More horizontal padding, reduce horizontal area
-            // Rectangles/Squares: Standard padding, maximize space usage
-            val (horizontalPaddingDp, verticalPaddingDp, widthMargin, heightMargin) = when (bubbleShape) {
-                BubbleShape.HORIZONTAL_OVAL -> {
-                    // Horizontal oval bubbles - language-specific height margins
-                    // Korean/CJK: Use 70% of height (very conservative to avoid curves)
-                    // Spanish/Indonesian: Use 85% of height (more space to prevent clipping)
-                    Quadruple(
-                        HORIZONTAL_PADDING_DP,        // 8dp horizontal
-                        OVAL_VERTICAL_PADDING_DP,     // 10dp vertical (increased to avoid curves)
-                        OVAL_WIDTH_SAFETY_MARGIN,     // 98% width (keep full width)
-                        ovalHeightMargin              // 85% for Spanish/Indonesian, 70% for Korean/CJK
-                    )
-                }
-                BubbleShape.VERTICAL_OVAL -> {
-                    // Vertical oval bubbles - less common
-                    // Text gets cut off at curved left/right edges
-                    Quadruple(
-                        OVAL_HORIZONTAL_PADDING_DP,          // 4dp horizontal
-                        VERTICAL_PADDING_DP,                 // 2dp vertical
-                        VERTICAL_OVAL_WIDTH_SAFETY_MARGIN,   // 70% width (avoid curves)
-                        VERTICAL_OVAL_HEIGHT_SAFETY_MARGIN   // 95% height
-                    )
-                }
-                else -> {
-                    // Rectangles and squares - standard case
-                    // Maximize vertical space usage for better text fit
-                    Quadruple(
-                        HORIZONTAL_PADDING_DP,  // 8dp horizontal
-                        VERTICAL_PADDING_DP,    // 2dp vertical (reduced for max space)
-                        WIDTH_SAFETY_MARGIN,    // 95% width
-                        HEIGHT_SAFETY_MARGIN    // 99% height (maximized for rectangles)
-                    )
-                }
+            // Get shape-specific padding and margins based on language module
+            val (horizontalPaddingDp, verticalPaddingDp, widthMargin, heightMargin) = if (isCJK) {
+                getCJKShapeConfig(bubbleShape)
+            } else {
+                getLatinShapeConfig(bubbleShape, ovalHeightMargin, latinHorizontalPadding, latinVerticalPadding)
             }
 
-            // Apply edge padding to prevent text touching bubble edges
+            // Apply edge padding
             val horizontalPaddingPx = with(density) { (horizontalPaddingDp.dp).roundToPx() }
             val verticalPaddingPx = with(density) { (verticalPaddingDp.dp).roundToPx() }
 
-            // Calculate available text area with shape-aware padding and safety margins
+            // Calculate available text area
             val totalHorizontalPadding = horizontalPaddingPx * 2
             val totalVerticalPadding = verticalPaddingPx * 2
 
             val maxWidthPx = with(density) {
                 ((calculatedDimensions.width.roundToPx() - totalHorizontalPadding) * widthMargin).toInt()
-                    .coerceAtLeast(0)  // Prevent negative values
+                    .coerceAtLeast(0)
             }
             val maxHeightPx = with(density) {
                 ((calculatedDimensions.height.roundToPx() - totalVerticalPadding) * heightMargin).toInt()
-                    .coerceAtLeast(0)  // Prevent negative values
+                    .coerceAtLeast(0)
             }
 
-            // Apply user-configurable margin to create inset spacing from bubble edges
-            // Margin is applied on all sides (2x for width and height)
+            // Apply user-configurable margin
             val finalMaxWidthPx = (maxWidthPx - userMarginPx * 2).coerceAtLeast(0)
             val finalMaxHeightPx = (maxHeightPx - userMarginPx * 2).coerceAtLeast(0)
 
-            // Calculate actual constrained width for text layout (with padding and margin applied)
             val constrainedWidthDp = with(density) { finalMaxWidthPx.toDp() }
 
-            // Safety check: If text area is too small, skip rendering to prevent crashes
+            // Safety check: If text area is too small, skip rendering
             val minTextAreaWidth = 30
             val minTextAreaHeight = 20
             if (finalMaxWidthPx < minTextAreaWidth || finalMaxHeightPx < minTextAreaHeight) {
                 logcat(LogPriority.WARN) {
-                    "SmartTranslationBlock: Bubble too small to render text (${finalMaxWidthPx}x${finalMaxHeightPx}px). " +
-                    "Skipping translation for text: '${block.translation.take(30)}...'"
+                    "SmartTranslationBlock: Bubble too small (${finalMaxWidthPx}x${finalMaxHeightPx}px). " +
+                    "Skipping: '${block.translation.take(30)}...'"
                 }
-                // Return empty layout to prevent constraint crashes
                 return@SubcomposeLayout layout(constraints.maxWidth, constraints.maxHeight) {}
             }
 
-            // Binary search for optimal font size with minimum threshold
-            // Cap maximum font size to 12dp for all languages for consistency
-            val isCJKLanguage = sourceLanguage.lowercase() in listOf("ko", "korean", "ja", "japanese", "zh", "chinese")
-            var low = MIN_FONT_SIZE.toInt()
-            var high = CJK_MAX_FONT_SIZE.toInt()  // Use 12dp for all languages
-            var bestSize = low
-
-            while (low <= high) {
-                val mid = ((low + high) / 2).coerceAtLeast(MIN_FONT_SIZE.toInt())
-                val textLayoutResult = subcompose(mid.sp) {
-                    Text(
-                        text = block.translation,
-                        fontSize = mid.sp,
-                        fontFamily = fontFamily,
-                        color = Color.Black,
-                        overflow = TextOverflow.Clip,
-                        textAlign = TextAlign.Justify,
-                        maxLines = calculateMaxLines(finalMaxHeightPx, mid, isKoreanToEnglish),
-                        softWrap = true,
-                        modifier = Modifier
-                            .width(constrainedWidthDp)
-                            .rotate(if (isVertical) 0f else block.angle)
-                            .align(Alignment.Center),
-                    )
-                }[0].measure(Constraints(maxWidth = finalMaxWidthPx))
-
-                if (textLayoutResult.height <= finalMaxHeightPx && textLayoutResult.width <= finalMaxWidthPx) {
-                    bestSize = mid
-                    low = mid + 1
+            // Determine font size based on module
+            val fontSize = if (isCJK) {
+                // CJK: Binary search for optimal size, capped at 12dp
+                findOptimalFontSizeCJK(
+                    block = block,
+                    fontFamily = fontFamily,
+                    finalMaxWidthPx = finalMaxWidthPx,
+                    finalMaxHeightPx = finalMaxHeightPx,
+                    constrainedWidthDp = constrainedWidthDp,
+                    isVertical = isVertical,
+                    isKoreanToEnglish = isKoreanToEnglish,
+                    subcompose = { size, content -> subcompose(size, content) }
+                )
+            } else {
+                // Latin: Use pre-calculated font size from hybrid overflow, or find optimal
+                if (calculatedDimensions.fontSize > 0) {
+                    calculatedDimensions.fontSize
                 } else {
-                    high = mid - 1
+                    findOptimalFontSizeLatin(
+                        block = block,
+                        fontFamily = fontFamily,
+                        finalMaxWidthPx = finalMaxWidthPx,
+                        finalMaxHeightPx = finalMaxHeightPx,
+                        constrainedWidthDp = constrainedWidthDp,
+                        isVertical = isVertical,
+                        subcompose = { size, content -> subcompose(size, content) }
+                    )
                 }
             }
 
-            val finalFontSize = bestSize.coerceAtLeast(MIN_FONT_SIZE.toInt()).sp
+            val finalFontSize = fontSize.coerceAtLeast(
+                if (isCJK) MIN_FONT_SIZE.toInt() else LATIN_MIN_FONT_SIZE
+            ).sp
 
-            // Measure final layout with constrained width to prevent horizontal clipping
-            // Wrap text in Box with white background to ensure visibility on any manga page color
+            // Calculate max lines based on module
+            val lineHeightMultiplier = if (isCJK) KOREAN_LINE_HEIGHT_MULTIPLIER else LATIN_LINE_HEIGHT_MULTIPLIER
+            val maxLines = calculateMaxLines(finalMaxHeightPx, fontSize, lineHeightMultiplier)
+
+            // Render text with white background
             val textPlaceable = subcompose(Unit) {
                 Box(
                     modifier = Modifier
-                        .background(Color.White.copy(alpha = 0.9f)) // Semi-transparent white background
+                        .background(Color.White.copy(alpha = 0.9f))
                         .wrapContentSize()
                 ) {
                     Text(
@@ -310,7 +327,7 @@ fun SmartTranslationBlock(
                         softWrap = true,
                         overflow = TextOverflow.Clip,
                         textAlign = TextAlign.Justify,
-                        maxLines = calculateMaxLines(finalMaxHeightPx, bestSize, isKoreanToEnglish),
+                        maxLines = maxLines,
                         modifier = Modifier
                             .width(constrainedWidthDp)
                             .rotate(if (isVertical) 0f else block.angle)
@@ -319,8 +336,6 @@ fun SmartTranslationBlock(
                 }
             }[0].measure(Constraints(maxWidth = finalMaxWidthPx, maxHeight = finalMaxHeightPx))
 
-            // Use full available space for layout to prevent clipping
-            // This allows text to render in the entire bubble area
             layout(constraints.maxWidth, constraints.maxHeight) {
                 textPlaceable.place(0, 0)
             }
@@ -328,49 +343,66 @@ fun SmartTranslationBlock(
     }
 }
 
+// ============================================================================
+// CJK-specific functions (preserved from original)
+// ============================================================================
+
 /**
- * Calculate optimal bubble dimensions with expansion if needed
- * Includes special handling for Korean -> English and Spanish/Indonesian -> English translations
- * Applies translator-specific optimizations (e.g., Cloud Translation produces longer text)
+ * Get shape-specific configuration for CJK languages.
+ * These values are PRESERVED from the original implementation.
  */
-private fun calculateOptimalDimensions(
+private fun getCJKShapeConfig(bubbleShape: BubbleShape): Quadruple<Int, Int, Float, Float> {
+    return when (bubbleShape) {
+        BubbleShape.HORIZONTAL_OVAL -> Quadruple(
+            CJK_HORIZONTAL_PADDING_DP,
+            CJK_OVAL_VERTICAL_PADDING_DP,
+            CJK_OVAL_WIDTH_SAFETY_MARGIN,
+            CJK_OVAL_HEIGHT_SAFETY_MARGIN // 70% - conservative
+        )
+        BubbleShape.VERTICAL_OVAL -> Quadruple(
+            CJK_OVAL_HORIZONTAL_PADDING_DP,
+            CJK_VERTICAL_PADDING_DP,
+            CJK_VERTICAL_OVAL_WIDTH_SAFETY_MARGIN,
+            CJK_VERTICAL_OVAL_HEIGHT_SAFETY_MARGIN
+        )
+        else -> Quadruple(
+            CJK_HORIZONTAL_PADDING_DP,
+            CJK_VERTICAL_PADDING_DP,
+            CJK_WIDTH_SAFETY_MARGIN,
+            CJK_HEIGHT_SAFETY_MARGIN
+        )
+    }
+}
+
+/**
+ * Calculate optimal dimensions for CJK translations.
+ * PRESERVED from original implementation.
+ */
+private fun calculateCJKOptimalDimensions(
     text: String,
     originalText: String,
     baseWidth: Dp,
     baseHeight: Dp,
-    fontFamily: FontFamily,
     isKoreanToEnglish: Boolean,
     translatorType: String = "gemini",
-    sourceLanguage: String = "auto",
-    targetLanguage: String = "en"
 ): BubbleDimensions {
-    // Check for Spanish/Indonesian -> English FIRST (separate from CJK logic)
-    // This ensures complete separation of concerns
-    val nonCJKExpansion = calculateNonCJKExpansion(sourceLanguage, targetLanguage, baseWidth, baseHeight)
-    if (nonCJKExpansion.expansionRatio > 1.0f) {
-        // Spanish/Indonesian expansion applied, return early
-        return nonCJKExpansion
-    }
-
-    // For Korean -> English, apply specialized expansion algorithm (CJK logic path)
+    // Korean -> English: Specialized expansion
     if (isKoreanToEnglish) {
         return calculateKoreanToEnglishDimensions(
-            text,
-            originalText,
-            baseWidth,
-            baseHeight,
-            translatorType
+            englishText = text,
+            koreanText = originalText,
+            baseWidth = baseWidth,
+            baseHeight = baseHeight,
+            translatorType = translatorType
         )
     }
 
-    // For short text, use base dimensions
+    // Short text: Use base dimensions
     if (text.length < 20) {
-        return BubbleDimensions(baseWidth, baseHeight, 1.0f)
+        return BubbleDimensions(baseWidth, baseHeight, 1.0f, CJK_MAX_FONT_SIZE.toInt())
     }
 
-    // For longer text that might not fit at minimum font size,
-    // apply expansion proportionally
-    // Cloud Translation produces longer output, so apply additional expansion
+    // Longer text: Apply expansion
     val isCloudTranslation = translatorType.lowercase() == "cloud"
     val cloudMultiplier = if (isCloudTranslation) CLOUD_TRANSLATION_EXPANSION_MULTIPLIER else 1.0f
 
@@ -391,14 +423,14 @@ private fun calculateOptimalDimensions(
     return BubbleDimensions(
         width = baseWidth * expansionRatio,
         height = baseHeight * expansionRatio,
-        expansionRatio = expansionRatio
+        expansionRatio = expansionRatio,
+        fontSize = CJK_MAX_FONT_SIZE.toInt()
     )
 }
 
 /**
- * Calculate bubble dimensions specifically for Korean -> English translation
- * Korean text is extremely compact; English translations typically expand 1.8-2.5x
- * Cloud Translation produces longer output (2.2-3.0x) due to more literal translation
+ * Calculate Korean -> English dimensions.
+ * PRESERVED from original implementation.
  */
 private fun calculateKoreanToEnglishDimensions(
     englishText: String,
@@ -407,7 +439,6 @@ private fun calculateKoreanToEnglishDimensions(
     baseHeight: Dp,
     translatorType: String = "gemini",
 ): BubbleDimensions {
-    // Cloud Translation produces longer, more literal translations
     val isCloudTranslation = translatorType.lowercase() == "cloud"
     val minExpansion = if (isCloudTranslation) {
         CLOUD_KOREAN_TO_ENGLISH_MIN_EXPANSION
@@ -420,140 +451,235 @@ private fun calculateKoreanToEnglishDimensions(
         KOREAN_TO_ENGLISH_MAX_EXPANSION
     }
 
-    // Calculate length ratio (English characters / Korean characters)
     val lengthRatio = if (koreanText.isNotEmpty()) {
         englishText.length.toFloat() / koreanText.length.toFloat()
     } else {
-        2.0f // Default assumption
+        2.0f
     }
 
-    // Determine expansion ratio based on length ratio and absolute lengths
     val expansionRatio = when {
-        // Very long translations need maximum expansion
         englishText.length > 200 -> maxExpansion
-
-        // High length ratio (English much longer than Korean)
         lengthRatio > 3.0f -> maxExpansion
         lengthRatio > 2.0f -> maxExpansion * 0.9f
-
-        // Medium length text
         englishText.length > 100 -> minExpansion * 1.2f
         englishText.length > 50 -> minExpansion
-
-        // Short text (less aggressive expansion)
         englishText.length < 20 -> 1.3f
-
-        // Default case
         else -> minExpansion
     }.coerceAtMost(maxExpansion)
 
-    // Apply minimum width constraint for Korean->English to prevent narrow tall bubbles
     val minWidthForKorean = baseWidth * 1.4f
     val expandedWidth = (baseWidth * expansionRatio).coerceAtLeast(minWidthForKorean)
 
     return BubbleDimensions(
         width = expandedWidth,
         height = baseHeight * expansionRatio,
-        expansionRatio = expansionRatio
+        expansionRatio = expansionRatio,
+        fontSize = CJK_MAX_FONT_SIZE.toInt()
     )
 }
 
 /**
- * Calculate maximum lines based on bubble height and font size
- * Uses optimized line height multipliers to maximize vertical space utilization
- * while maintaining readability
+ * Find optimal font size for CJK using binary search.
  */
-private fun calculateMaxLines(heightPx: Int, fontSize: Int, isKoreanToEnglish: Boolean): Int {
-    // Use reduced line height multipliers to pack lines closer together
-    // This allows better utilization of vertical space and reduces wasted space at bottom of bubbles
-    val lineHeightMultiplier = if (isKoreanToEnglish) {
-        KOREAN_LINE_HEIGHT_MULTIPLIER // 1.4x for Korean→English
-    } else {
-        GENERIC_LINE_HEIGHT_MULTIPLIER // 1.3x for other languages
+private fun findOptimalFontSizeCJK(
+    block: TranslationBlock,
+    fontFamily: FontFamily,
+    finalMaxWidthPx: Int,
+    finalMaxHeightPx: Int,
+    constrainedWidthDp: Dp,
+    isVertical: Boolean,
+    isKoreanToEnglish: Boolean,
+    subcompose: (Any, @Composable () -> Unit) -> List<androidx.compose.ui.layout.Measurable>
+): Int {
+    var low = MIN_FONT_SIZE.toInt()
+    var high = CJK_MAX_FONT_SIZE.toInt()
+    var bestSize = low
+
+    while (low <= high) {
+        val mid = ((low + high) / 2).coerceAtLeast(MIN_FONT_SIZE.toInt())
+        val textLayoutResult = subcompose(mid.sp) {
+            Text(
+                text = block.translation,
+                fontSize = mid.sp,
+                fontFamily = fontFamily,
+                color = Color.Black,
+                overflow = TextOverflow.Clip,
+                textAlign = TextAlign.Justify,
+                maxLines = calculateMaxLines(finalMaxHeightPx, mid, KOREAN_LINE_HEIGHT_MULTIPLIER),
+                softWrap = true,
+                modifier = Modifier
+                    .width(constrainedWidthDp)
+                    .rotate(if (isVertical) 0f else block.angle),
+            )
+        }[0].measure(Constraints(maxWidth = finalMaxWidthPx))
+
+        if (textLayoutResult.height <= finalMaxHeightPx && textLayoutResult.width <= finalMaxWidthPx) {
+            bestSize = mid
+            low = mid + 1
+        } else {
+            high = mid - 1
+        }
     }
 
+    return bestSize.coerceAtLeast(MIN_FONT_SIZE.toInt())
+}
+
+// ============================================================================
+// Latin-specific functions (new implementation)
+// ============================================================================
+
+/**
+ * Get shape-specific configuration for Latin languages.
+ * Uses more generous margins to prevent text clipping.
+ */
+private fun getLatinShapeConfig(
+    bubbleShape: BubbleShape,
+    ovalHeightMargin: Float,
+    horizontalPadding: Int,
+    verticalPadding: Int
+): Quadruple<Int, Int, Float, Float> {
+    return when (bubbleShape) {
+        BubbleShape.HORIZONTAL_OVAL -> Quadruple(
+            horizontalPadding,
+            LATIN_OVAL_VERTICAL_PADDING_DP,
+            LATIN_OVAL_WIDTH_SAFETY_MARGIN,
+            ovalHeightMargin // User-configurable, default 95%
+        )
+        BubbleShape.VERTICAL_OVAL -> Quadruple(
+            LATIN_OVAL_HORIZONTAL_PADDING_DP,
+            verticalPadding,
+            LATIN_VERTICAL_OVAL_WIDTH_SAFETY_MARGIN,
+            LATIN_VERTICAL_OVAL_HEIGHT_SAFETY_MARGIN
+        )
+        else -> Quadruple(
+            horizontalPadding,
+            verticalPadding,
+            LATIN_WIDTH_SAFETY_MARGIN,
+            LATIN_HEIGHT_SAFETY_MARGIN
+        )
+    }
+}
+
+/**
+ * Calculate optimal dimensions for Latin translations using HYBRID OVERFLOW STRATEGY.
+ *
+ * Strategy:
+ * 1. Try fitting text at base size with 12dp font
+ * 2. If doesn't fit, expand bubble up to 1.3x
+ * 3. If still doesn't fit, reduce font to 10dp
+ */
+private fun calculateLatinOptimalDimensions(
+    text: String,
+    baseWidth: Dp,
+    baseHeight: Dp,
+): BubbleDimensions {
+    // Short text: Use base dimensions with 12dp
+    if (text.length < 30) {
+        return BubbleDimensions(
+            width = baseWidth,
+            height = baseHeight,
+            expansionRatio = 1.0f,
+            fontSize = CJK_MAX_FONT_SIZE.toInt()
+        )
+    }
+
+    // Medium text (30-100 chars): Slight expansion
+    if (text.length < 100) {
+        val expansion = 1.1f
+        return BubbleDimensions(
+            width = baseWidth * expansion,
+            height = baseHeight * expansion,
+            expansionRatio = expansion,
+            fontSize = CJK_MAX_FONT_SIZE.toInt()
+        )
+    }
+
+    // Longer text (100-200 chars): Moderate expansion
+    if (text.length < 200) {
+        val expansion = 1.2f
+        return BubbleDimensions(
+            width = baseWidth * expansion,
+            height = baseHeight * expansion,
+            expansionRatio = expansion,
+            fontSize = CJK_MAX_FONT_SIZE.toInt()
+        )
+    }
+
+    // Very long text (200+ chars): Max expansion with potential font reduction
+    // Let the font size finder handle this - return max expansion with flag
+    return BubbleDimensions(
+        width = baseWidth * LATIN_MAX_EXPANSION,
+        height = baseHeight * LATIN_MAX_EXPANSION,
+        expansionRatio = LATIN_MAX_EXPANSION,
+        fontSize = 0 // Signal to use font size finder
+    )
+}
+
+/**
+ * Find optimal font size for Latin using binary search.
+ * Can reduce to 10dp if text still doesn't fit at 12dp.
+ */
+private fun findOptimalFontSizeLatin(
+    block: TranslationBlock,
+    fontFamily: FontFamily,
+    finalMaxWidthPx: Int,
+    finalMaxHeightPx: Int,
+    constrainedWidthDp: Dp,
+    isVertical: Boolean,
+    subcompose: (Any, @Composable () -> Unit) -> List<androidx.compose.ui.layout.Measurable>
+): Int {
+    var low = LATIN_MIN_FONT_SIZE
+    var high = CJK_MAX_FONT_SIZE.toInt()
+    var bestSize = low
+
+    while (low <= high) {
+        val mid = ((low + high) / 2).coerceAtLeast(LATIN_MIN_FONT_SIZE)
+        val textLayoutResult = subcompose("latin_$mid") {
+            Text(
+                text = block.translation,
+                fontSize = mid.sp,
+                fontFamily = fontFamily,
+                color = Color.Black,
+                overflow = TextOverflow.Clip,
+                textAlign = TextAlign.Justify,
+                maxLines = calculateMaxLines(finalMaxHeightPx, mid, LATIN_LINE_HEIGHT_MULTIPLIER),
+                softWrap = true,
+                modifier = Modifier
+                    .width(constrainedWidthDp)
+                    .rotate(if (isVertical) 0f else block.angle),
+            )
+        }[0].measure(Constraints(maxWidth = finalMaxWidthPx))
+
+        if (textLayoutResult.height <= finalMaxHeightPx && textLayoutResult.width <= finalMaxWidthPx) {
+            bestSize = mid
+            low = mid + 1
+        } else {
+            high = mid - 1
+        }
+    }
+
+    return bestSize.coerceAtLeast(LATIN_MIN_FONT_SIZE)
+}
+
+// ============================================================================
+// Common functions
+// ============================================================================
+
+/**
+ * Calculate maximum lines based on bubble height and font size.
+ */
+private fun calculateMaxLines(heightPx: Int, fontSize: Int, lineHeightMultiplier: Float): Int {
     val approximateLineHeight = fontSize * lineHeightMultiplier
     val maxLines = (heightPx / approximateLineHeight).toInt().coerceAtLeast(1)
-    // Cap at reasonable maximum to prevent excessive lines
     return maxLines.coerceAtMost(20)
 }
 
 /**
- * Data class to hold calculated bubble dimensions
+ * Data class to hold calculated bubble dimensions.
  */
 private data class BubbleDimensions(
     val width: Dp,
     val height: Dp,
-    val expansionRatio: Float
+    val expansionRatio: Float,
+    val fontSize: Int = 12
 )
-
-/**
- * Detect if this is a Korean -> English translation pair
- */
-private fun isKoreanToEnglishTranslation(sourceLanguage: String, targetLanguage: String): Boolean {
-    val isKoreanSource = sourceLanguage.lowercase() in listOf("ko", "korean", "kor")
-    val isEnglishTarget = targetLanguage.lowercase() in listOf("en", "english", "eng")
-    return isKoreanSource && isEnglishTarget
-}
-
-/**
- * Detect if this is a Spanish or Indonesian -> English translation pair
- * These languages often produce longer English translations that need special handling
- * for oval bubbles to prevent text clipping
- */
-private fun isSpanishOrIndonesianToEnglish(sourceLanguage: String, targetLanguage: String): Boolean {
-    val source = sourceLanguage.lowercase()
-    val target = targetLanguage.lowercase()
-
-    val isSpanishSource = source in listOf("es", "spanish", "spa", "español")
-    val isIndonesianSource = source in listOf("id", "in", "indonesian", "ind")
-    val isEnglishTarget = target in listOf("en", "english", "eng")
-
-    return (isSpanishSource || isIndonesianSource) && isEnglishTarget
-}
-
-/**
- * Calculate bubble dimensions for Spanish/Indonesian -> English translations
- * These languages produce moderately longer English text requiring expansion
- * Completely separate from CJK/Korean expansion logic
- */
-private fun calculateNonCJKExpansion(
-    sourceLanguage: String,
-    targetLanguage: String,
-    baseWidth: Dp,
-    baseHeight: Dp
-): BubbleDimensions {
-    if (!isSpanishOrIndonesianToEnglish(sourceLanguage, targetLanguage)) {
-        // Not Spanish/Indonesian -> English, return base dimensions
-        return BubbleDimensions(baseWidth, baseHeight, 1.0f)
-    }
-
-    // Apply 1.4x expansion for Spanish/Indonesian -> English
-    // This is less aggressive than Korean (1.8-3.0x) but still provides adequate space
-    val expansionRatio = NON_CJK_TO_ENGLISH_EXPANSION
-
-    // Log expansion for debugging
-    logcat(tag = "SmartTranslationBlock") { "Non-CJK expansion: $sourceLanguage -> $targetLanguage, ratio = ${expansionRatio}x" }
-
-    return BubbleDimensions(
-        width = baseWidth * expansionRatio,
-        height = baseHeight * expansionRatio,
-        expansionRatio = expansionRatio
-    )
-}
-
-/**
- * Get the appropriate oval height safety margin based on language pair
- * Completely separate from CJK/Korean logic
- * Returns 0.85f for Spanish/Indonesian (more space), 0.70f for Korean/CJK
- */
-private fun getNonCJKOvalHeightMargin(sourceLanguage: String, targetLanguage: String): Float {
-    return if (isSpanishOrIndonesianToEnglish(sourceLanguage, targetLanguage)) {
-        // Spanish/Indonesian -> English: Use 85% height (more vertical space)
-        logcat(tag = "SmartTranslationBlock") { "Non-CJK oval margin: Using 85% height for $sourceLanguage -> $targetLanguage" }
-        NON_CJK_OVAL_HEIGHT_SAFETY_MARGIN
-    } else {
-        // Korean/CJK or other: Use 70% height (default)
-        OVAL_HEIGHT_SAFETY_MARGIN
-    }
-}
