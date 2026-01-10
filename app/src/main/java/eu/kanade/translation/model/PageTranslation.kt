@@ -1,6 +1,7 @@
 package eu.kanade.translation.model
 
 import kotlinx.serialization.Serializable
+import tachiyomi.domain.translation.model.ProfileType
 
 @Serializable
 data class PageTranslation(
@@ -11,6 +12,15 @@ data class PageTranslation(
     var targetLanguage: String = "en", // Store target language for translation pair optimizations
     var translatorType: String = "gemini", // Store translator engine type (cloud, gemini, mlkit, openrouter) for rendering optimizations
 ) {
+    /**
+     * Computed property that returns the profile type based on source language.
+     * CJK languages (Korean, Japanese, Chinese) use the CJK profile,
+     * all others (Spanish, Indonesian, etc.) use the Latin profile.
+     * Note: No @Transient needed as computed properties have no backing field.
+     */
+    val profileType: ProfileType
+        get() = ProfileType.fromSourceLanguage(sourceLanguage)
+
     companion object {
         val EMPTY = PageTranslation()
     }
