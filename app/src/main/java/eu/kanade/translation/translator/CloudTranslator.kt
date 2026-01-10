@@ -129,10 +129,15 @@ class CloudTranslator(
                                         options.add(Translate.TranslateOption.sourceLanguage(actualSourceCode))
                                     }
 
+                                    logcat { "CloudTranslator API call: source=${actualSourceCode ?: "auto"}, target=$targetCode, text='${block.text.take(50)}...'" }
+
                                     val translation = translateService!!.translate(
                                         block.text,
                                         *options.toTypedArray()
                                     )
+
+                                    // Log API response details
+                                    logcat { "CloudTranslator API response: translatedText='${translation.translatedText?.take(50) ?: "null"}', detectedSourceLang=${translation.sourceLanguage}" }
 
                                     // Decode HTML entities (&#39; -> ', &quot; -> ", etc.)
                                     val translatedText = translation.translatedText ?: block.text
@@ -140,6 +145,7 @@ class CloudTranslator(
 
                                     // Apply Korean-specific post-processing if source is Korean
                                     block.translation = if (isKoreanSource(actualSourceCode, pageTranslation.sourceLanguage)) {
+                                        logcat { "Applying Korean post-processing to: '$decodedText'" }
                                         postProcessKoreanTranslation(decodedText)
                                     } else {
                                         decodedText
@@ -161,7 +167,7 @@ class CloudTranslator(
                                 block.translation = block.text // Fallback to original text
                                 failedBlocks++
                                 logcat(LogPriority.ERROR) {
-                                    "Failed to translate block in page $pageKey: ${e.message}"
+                                    "Failed to translate block in page $pageKey: ${e.message}\n${e.stackTraceToString()}"
                                 }
                             }
                         }
@@ -216,9 +222,11 @@ class CloudTranslator(
      * Check if source language is Korean
      */
     private fun isKoreanSource(sourceCode: String?, detectedLanguage: String): Boolean {
-        return sourceCode == "ko" ||
+        val isKorean = sourceCode == "ko" ||
                detectedLanguage.lowercase() == "ko" ||
                detectedLanguage.lowercase().contains("korean")
+        logcat { "isKoreanSource check: sourceCode=$sourceCode, detectedLanguage=$detectedLanguage, result=$isKorean" }
+        return isKorean
     }
 
     /**
@@ -233,37 +241,21 @@ class CloudTranslator(
         result = result.replace(Regex("\\s+of\\s+the\\s+"), " ")  // Redundant particles
         result = result.replace(Regex("\\s{2,}"), " ")  // Multiple spaces to single space
 
-        // Fix common Korean romanization issues that Google Cloud mishandles
-        // Keep common Korean terms as-is instead of translating
-        val koreanTerms = mapOf(
-            "oppa" to "oppa",
-            "unni" to "unni",
-            "hyung" to "hyung",
-            "noona" to "noona",
-            "sunbae" to "sunbae",
-            "hubae" to "hubae",
-            "soju" to "soju",
-            "makgeolli" to "makgeolli",
-            "samgyeopsal" to "samgyeopsal"
-        )
-
         // Case-insensitive replacement of mistranslations back to Korean terms
-        for ((korean, keep) in koreanTerms) {
-            result = result.replace(Regex("\\b(older brother|older sister|senior|junior|rice wine|pork belly)\\b", RegexOption.IGNORE_CASE)) {
-                when (it.value.lowercase()) {
-                    "older brother" -> if (result.contains("female", ignoreCase = true)) "unni" else "hyung"
-                    "older sister" -> if (result.contains("male", ignoreCase = true)) "noona" else "unni"
-                    "senior" -> "sunbae"
-                    "junior" -> "hubae"
-                    "rice wine" -> "soju"
-                    "pork belly" -> "samgyeopsal"
-                    else -> it.value
-                }
-            }
-        }
+        // NOTE: This is a simplified approach - context-aware replacement would require NLP
+        result = result.replace(Regex("\\b(older brother)\\b", RegexOption.IGNORE_CASE)) { "hyung" }
+        result = result.replace(Regex("\\b(older sister)\\b", RegexOption.IGNORE_CASE)) { "unni" }
+        result = result.replace(Regex("\\b(senior|upperclassman)\\b", RegexOption.IGNORE_CASE)) { "sunbae" }
+        result = result.replace(Regex("\\b(junior|underclassman)\\b", RegexOption.IGNORE_CASE)) { "hubae" }
+        result = result.replace(Regex("\\b(rice wine)\\b", RegexOption.IGNORE_CASE)) { "soju" }
+        result = result.replace(Regex("\\b(pork belly)\\b", RegexOption.IGNORE_CASE)) { "samgyeopsal" }
+        result = result.replace(Regex("\\b(internet cafe|PC room|PC cafe)\\b", RegexOption.IGNORE_CASE)) { "PC bang" }
+        result = result.replace(Regex("\\b(karaoke room)\\b", RegexOption.IGNORE_CASE)) { "noraebang" }
 
         // Trim excess whitespace
         result = result.trim()
+
+        logcat { "Korean post-processing result: '$result'" }
 
         return result
     }

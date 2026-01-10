@@ -1,6 +1,10 @@
 package tachiyomi.domain.translation
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import tachiyomi.core.common.preference.PreferenceStore
+import tachiyomi.domain.translation.model.ProfileType
+import tachiyomi.domain.translation.model.TranslationProfile
 
 class TranslationPreferences(
     private val preferenceStore: PreferenceStore,
@@ -62,4 +66,122 @@ class TranslationPreferences(
 
     // Vertical padding in dp (2-10dp)
     fun latinVerticalPadding() = preferenceStore.getInt("latin_vertical_padding", 4)
+
+    // ============================================================================
+    // Profile Factory Methods
+    // ============================================================================
+
+    /**
+     * Get the current CJK translation profile as a snapshot.
+     */
+    fun getCJKProfile(): TranslationProfile {
+        return TranslationProfile(
+            type = ProfileType.CJK,
+            textMargin = cjkTextMargin().get(),
+            paddingMultiplier = cjkPaddingMultiplier().get() / 100f,
+            ovalHeightMargin = cjkOvalHeightMargin().get() / 100f,
+            horizontalPadding = 8, // CJK uses fixed padding
+            verticalPadding = 2,   // CJK uses fixed padding
+            minFontSize = 12,      // CJK uses fixed font size
+            maxFontSize = 12,      // CJK uses fixed font size
+            lineHeightMultiplier = 1.4f,
+            minExpansion = 1.8f,
+            maxExpansion = 2.5f,
+            useHybridOverflow = false,
+        )
+    }
+
+    /**
+     * Get the current Latin translation profile as a snapshot.
+     */
+    fun getLatinProfile(): TranslationProfile {
+        return TranslationProfile(
+            type = ProfileType.LATIN,
+            textMargin = latinTextMargin().get(),
+            paddingMultiplier = latinPaddingMultiplier().get() / 100f,
+            ovalHeightMargin = latinOvalHeightMargin().get() / 100f,
+            horizontalPadding = latinHorizontalPadding().get(),
+            verticalPadding = latinVerticalPadding().get(),
+            minFontSize = 10,      // Latin can reduce font
+            maxFontSize = 12,      // Latin max font
+            lineHeightMultiplier = 1.2f,
+            minExpansion = 1.0f,
+            maxExpansion = 1.3f,
+            useHybridOverflow = true,
+        )
+    }
+
+    /**
+     * Get a reactive Flow of CJK profile that emits when any CJK preference changes.
+     */
+    fun cjkProfileChanges(): Flow<TranslationProfile> {
+        return combine(
+            cjkTextMargin().changes(),
+            cjkPaddingMultiplier().changes(),
+            cjkOvalHeightMargin().changes(),
+        ) { textMargin, paddingMult, ovalMargin ->
+            TranslationProfile(
+                type = ProfileType.CJK,
+                textMargin = textMargin,
+                paddingMultiplier = paddingMult / 100f,
+                ovalHeightMargin = ovalMargin / 100f,
+                horizontalPadding = 8,
+                verticalPadding = 2,
+                minFontSize = 12,
+                maxFontSize = 12,
+                lineHeightMultiplier = 1.4f,
+                minExpansion = 1.8f,
+                maxExpansion = 2.5f,
+                useHybridOverflow = false,
+            )
+        }
+    }
+
+    /**
+     * Get a reactive Flow of Latin profile that emits when any Latin preference changes.
+     */
+    fun latinProfileChanges(): Flow<TranslationProfile> {
+        return combine(
+            latinTextMargin().changes(),
+            latinPaddingMultiplier().changes(),
+            latinOvalHeightMargin().changes(),
+            latinHorizontalPadding().changes(),
+            latinVerticalPadding().changes(),
+        ) { textMargin, paddingMult, ovalMargin, hPadding, vPadding ->
+            TranslationProfile(
+                type = ProfileType.LATIN,
+                textMargin = textMargin,
+                paddingMultiplier = paddingMult / 100f,
+                ovalHeightMargin = ovalMargin / 100f,
+                horizontalPadding = hPadding,
+                verticalPadding = vPadding,
+                minFontSize = 10,
+                maxFontSize = 12,
+                lineHeightMultiplier = 1.2f,
+                minExpansion = 1.0f,
+                maxExpansion = 1.3f,
+                useHybridOverflow = true,
+            )
+        }
+    }
+
+    /**
+     * Get the appropriate profile for the given source language.
+     */
+    fun getProfileForLanguage(sourceLanguage: String): TranslationProfile {
+        return when (ProfileType.fromSourceLanguage(sourceLanguage)) {
+            ProfileType.CJK -> getCJKProfile()
+            ProfileType.LATIN -> getLatinProfile()
+        }
+    }
+
+    /**
+     * Get a reactive Flow of the appropriate profile for the given source language.
+     */
+    fun profileChangesForLanguage(sourceLanguage: String): Flow<TranslationProfile> {
+        return when (ProfileType.fromSourceLanguage(sourceLanguage)) {
+            ProfileType.CJK -> cjkProfileChanges()
+            ProfileType.LATIN -> latinProfileChanges()
+        }
+    }
 }

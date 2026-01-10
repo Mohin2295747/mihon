@@ -175,14 +175,14 @@ class WebtoonTranslationsView :
     fun TextBlockBackground(scaleFactor: Float) {
         // Language-specific padding multipliers to prevent text overlap
         val paddingMultiplier = when (translation.sourceLanguage) {
-            "ko", "korean" -> 1.5f // Korean needs more padding due to complex Hangul shapes
+            "ko", "korean" -> 1.15f // FIXED: Match touch detection (was 1.5f)
             "ja", "japanese" -> 1.2f // Japanese with Kanji also benefits from extra padding
             else -> 1.0f
         }
 
         translation.blocks.forEach { block ->
-            val padX = (block.symWidth / 2) * paddingMultiplier
-            val padY = (block.symHeight / 2) * paddingMultiplier
+            val padX = (block.symWidth * 2) * paddingMultiplier // FIXED: Match SmartTranslationBlock (was / 2)
+            val padY = block.symHeight * paddingMultiplier       // FIXED: Match SmartTranslationBlock (was / 2)
             val bgX = (block.x - padX / 2) * scaleFactor
             val bgY = (block.y - padY / 2) * scaleFactor
             val bgWidth = (block.width + padX) * scaleFactor
@@ -246,8 +246,8 @@ class WebtoonTranslationsView :
             }
 
             // Calculate padding (FIXED: must match TextBlockBackground rendering exactly)
-            val padX = (block.symWidth / 2) * paddingMultiplier
-            val padY = (block.symHeight / 2) * paddingMultiplier
+            val padX = (block.symWidth * 2) * paddingMultiplier // FIXED: Match SmartTranslationBlock (was / 2)
+            val padY = block.symHeight * paddingMultiplier       // FIXED: Match SmartTranslationBlock (was / 2)
 
             // Calculate position with padding offset (matches TextBlockBackground rendering)
             // Using max(..., 0.0f) to prevent negative coordinates

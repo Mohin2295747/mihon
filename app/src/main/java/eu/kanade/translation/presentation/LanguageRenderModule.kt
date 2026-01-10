@@ -1,5 +1,8 @@
 package eu.kanade.translation.presentation
 
+import tachiyomi.domain.translation.model.ProfileType
+import tachiyomi.domain.translation.model.TranslationProfile
+
 /**
  * Language-specific rendering module for translation bubbles.
  *
@@ -9,6 +12,8 @@ package eu.kanade.translation.presentation
  *
  * The module system ensures CJK behavior remains intact while fixing text clipping
  * issues for Spanish/Indonesian translations.
+ *
+ * Modules can be created from a TranslationProfile for preference-backed configuration.
  */
 sealed class LanguageRenderModule {
     // Padding multiplier applied to symbol dimensions
@@ -132,6 +137,33 @@ sealed class LanguageRenderModule {
             return when {
                 lang in CJK_LANGUAGES -> CJKModule(lang)
                 else -> LatinModule() // Spanish, Indonesian, English, etc.
+            }
+        }
+
+        /**
+         * Create a language module from a TranslationProfile.
+         * This enables preference-backed configuration of rendering parameters.
+         *
+         * @param profile The TranslationProfile containing user preferences
+         * @param sourceLanguage The source language code (for CJK-specific adjustments)
+         * @return LanguageRenderModule configured with profile values
+         */
+        fun fromProfile(profile: TranslationProfile, sourceLanguage: String = ""): LanguageRenderModule {
+            return when (profile.type) {
+                ProfileType.CJK -> CJKModule(
+                    sourceLanguage = sourceLanguage,
+                    paddingMultiplier = profile.paddingMultiplier,
+                    ovalHeightMargin = profile.ovalHeightMargin,
+                    // Other CJK values remain at defaults for now
+                )
+                ProfileType.LATIN -> LatinModule(
+                    paddingMultiplier = profile.paddingMultiplier,
+                    ovalHeightMargin = profile.ovalHeightMargin,
+                    horizontalPaddingDp = profile.horizontalPadding,
+                    verticalPaddingDp = profile.verticalPadding,
+                    maxFontSize = profile.maxFontSize,
+                    minFontSize = profile.minFontSize,
+                )
             }
         }
 
