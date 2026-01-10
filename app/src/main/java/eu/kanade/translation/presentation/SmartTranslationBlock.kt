@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -30,6 +31,7 @@ import eu.kanade.translation.model.TranslationBlock
 import logcat.LogPriority
 import logcat.logcat
 import tachiyomi.domain.translation.TranslationPreferences
+import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import kotlin.math.max
@@ -122,35 +124,31 @@ fun SmartTranslationBlock(
         LanguageRenderModule.fromSourceLanguage(sourceLanguage)
     }
 
-    // Get preferences
+    // Get preferences - use remember for the preferences instance
     val translationPreferences = remember { Injekt.get<TranslationPreferences>() }
 
-    // Get module-specific settings from preferences
-    val (userMarginPx, paddingMultiplier, ovalHeightMargin) = remember(languageModule) {
-        when (languageModule) {
-            is LanguageRenderModule.CJKModule -> Triple(
-                translationPreferences.cjkTextMargin().get(),
-                translationPreferences.cjkPaddingMultiplier().get() / 100f,
-                translationPreferences.cjkOvalHeightMargin().get() / 100f
-            )
-            is LanguageRenderModule.LatinModule -> Triple(
-                translationPreferences.latinTextMargin().get(),
-                translationPreferences.latinPaddingMultiplier().get() / 100f,
-                translationPreferences.latinOvalHeightMargin().get() / 100f
-            )
-        }
-    }
+    // Detect if CJK or Latin module
+    val isCJKModule = languageModule is LanguageRenderModule.CJKModule
 
-    // Get Latin-specific padding overrides if applicable
-    val (latinHorizontalPadding, latinVerticalPadding) = remember(languageModule) {
-        when (languageModule) {
-            is LanguageRenderModule.LatinModule -> Pair(
-                translationPreferences.latinHorizontalPadding().get(),
-                translationPreferences.latinVerticalPadding().get()
-            )
-            else -> Pair(LATIN_HORIZONTAL_PADDING_DP, LATIN_VERTICAL_PADDING_DP)
-        }
-    }
+    // Get module-specific settings REACTIVELY from preferences using collectAsState
+    // CJK preferences
+    val cjkTextMargin by translationPreferences.cjkTextMargin().collectAsState()
+    val cjkPaddingMult by translationPreferences.cjkPaddingMultiplier().collectAsState()
+    val cjkOvalHeight by translationPreferences.cjkOvalHeightMargin().collectAsState()
+
+    // Latin preferences
+    val latinTextMargin by translationPreferences.latinTextMargin().collectAsState()
+    val latinPaddingMult by translationPreferences.latinPaddingMultiplier().collectAsState()
+    val latinOvalHeight by translationPreferences.latinOvalHeightMargin().collectAsState()
+    val latinHPadding by translationPreferences.latinHorizontalPadding().collectAsState()
+    val latinVPadding by translationPreferences.latinVerticalPadding().collectAsState()
+
+    // Select values based on current module
+    val userMarginPx = if (isCJKModule) cjkTextMargin else latinTextMargin
+    val paddingMultiplier = if (isCJKModule) cjkPaddingMult / 100f else latinPaddingMult / 100f
+    val ovalHeightMargin = if (isCJKModule) cjkOvalHeight / 100f else latinOvalHeight / 100f
+    val latinHorizontalPadding = if (isCJKModule) LATIN_HORIZONTAL_PADDING_DP else latinHPadding
+    val latinVerticalPadding = if (isCJKModule) LATIN_VERTICAL_PADDING_DP else latinVPadding
 
     // Apply padding multiplier to calculate symbol padding
     val padX = (block.symWidth * 2) * paddingMultiplier
@@ -165,25 +163,27 @@ fun SmartTranslationBlock(
 
     // Detect language-specific translation pairs
     val isKoreanToEnglish = LanguageRenderModule.isKoreanToEnglish(sourceLanguage, targetLanguage)
-    val isCJK = languageModule is LanguageRenderModule.CJKModule
     val isLatin = languageModule is LanguageRenderModule.LatinModule
 
     // Log module selection for debugging
     logcat(tag = "SmartTranslationBlock") {
-        "Module: ${if (isCJK) "CJK" else "Latin"}, source=$sourceLanguage, " +
+        "Module: ${if (isCJKModule) "CJK" else "Latin"}, source=$sourceLanguage, " +
         "paddingMult=$paddingMultiplier, ovalHeight=$ovalHeightMargin"
     }
 
     // Calculate optimal dimensions with expansion
+    // Note: This recalculates when preference values change due to collectAsState
     val calculatedDimensions = remember(
         block.translation,
         isKoreanToEnglish,
         translatorType,
         sourceLanguage,
         targetLanguage,
-        languageModule
+        languageModule,
+        paddingMultiplier, // Include preference values so dimensions recalculate
+        ovalHeightMargin,
     ) {
-        if (isCJK) {
+        if (isCJKModule) {
             // CJK path: Use original expansion logic
             val expandedDimensions = calculateCJKOptimalDimensions(
                 text = block.translation,
@@ -234,7 +234,7 @@ fun SmartTranslationBlock(
             val bubbleShape = block.detectShape()
 
             // Get shape-specific padding and margins based on language module
-            val (horizontalPaddingDp, verticalPaddingDp, widthMargin, heightMargin) = if (isCJK) {
+            val (horizontalPaddingDp, verticalPaddingDp, widthMargin, heightMargin) = if (isCJKModule) {
                 getCJKShapeConfig(bubbleShape)
             } else {
                 getLatinShapeConfig(bubbleShape, ovalHeightMargin, latinHorizontalPadding, latinVerticalPadding)
@@ -275,7 +275,7 @@ fun SmartTranslationBlock(
             }
 
             // Determine font size based on module
-            val fontSize = if (isCJK) {
+            val fontSize = if (isCJKModule) {
                 // CJK: Binary search for optimal size, capped at 12dp
                 findOptimalFontSizeCJK(
                     block = block,
@@ -305,11 +305,11 @@ fun SmartTranslationBlock(
             }
 
             val finalFontSize = fontSize.coerceAtLeast(
-                if (isCJK) MIN_FONT_SIZE.toInt() else LATIN_MIN_FONT_SIZE
+                if (isCJKModule) MIN_FONT_SIZE.toInt() else LATIN_MIN_FONT_SIZE
             ).sp
 
             // Calculate max lines based on module
-            val lineHeightMultiplier = if (isCJK) KOREAN_LINE_HEIGHT_MULTIPLIER else LATIN_LINE_HEIGHT_MULTIPLIER
+            val lineHeightMultiplier = if (isCJKModule) KOREAN_LINE_HEIGHT_MULTIPLIER else LATIN_LINE_HEIGHT_MULTIPLIER
             val maxLines = calculateMaxLines(finalMaxHeightPx, fontSize, lineHeightMultiplier)
 
             // Render text with white background
