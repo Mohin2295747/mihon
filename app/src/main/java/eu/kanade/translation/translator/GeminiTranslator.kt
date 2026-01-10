@@ -109,9 +109,12 @@ class GeminiTranslator(
 
             logcat { "GeminiTranslator: Received response from Gemini API" }
 
+            // Strip markdown code blocks if present (Gemini sometimes wraps JSON in ```json ... ```)
+            val responseText = response.text?.let { stripMarkdownCodeBlock(it) }
+
             // Enhanced response validation to prevent JSON EOF errors
             when {
-                response.text == null -> {
+                responseText == null -> {
                     val candidatesCount = response.candidates?.size ?: 0
                     val finishReason = response.candidates?.firstOrNull()?.finishReason?.toString() ?: "unknown"
                     val promptFeedback = response.promptFeedback?.toString() ?: "none"
@@ -130,7 +133,7 @@ class GeminiTranslator(
                     )
                 }
 
-                response.text!!.isBlank() -> {
+                responseText.isBlank() -> {
                     val finishReason = response.candidates?.firstOrNull()?.finishReason?.toString() ?: "unknown"
                     val safetyRatings = response.candidates?.firstOrNull()?.safetyRatings?.joinToString {
                         "${it.category}: ${it.probability}"
@@ -149,26 +152,26 @@ class GeminiTranslator(
                     )
                 }
 
-                !response.text!!.trim().startsWith("{") -> {
+                !responseText.trim().startsWith("{") -> {
                     logcat(LogPriority.ERROR) {
                         "GeminiTranslator: Response is not valid JSON\n" +
-                            "First 200 chars: ${response.text!!.take(200)}"
+                            "First 200 chars: ${responseText.take(200)}"
                     }
                     throw Exception(
                         "Gemini API did not return JSON. " +
-                            "Response starts with: '${response.text!!.take(50)}...'. " +
+                            "Response starts with: '${responseText.take(50)}...'. " +
                             "The model may not be following the system prompt correctly."
                     )
                 }
             }
 
-            logcat(LogPriority.DEBUG) { "GeminiTranslator: Response text: ${response.text!!.take(200)}..." }
+            logcat(LogPriority.DEBUG) { "GeminiTranslator: Response text: ${responseText.take(200)}..." }
 
             val resJson = try {
-                JSONObject(response.text!!)
+                JSONObject(responseText)
             } catch (e: Exception) {
-                logcat(LogPriority.ERROR) { "GeminiTranslator: Failed to parse response as JSON: ${response.text}" }
-                throw Exception("Gemini API returned invalid JSON. Response: ${response.text?.take(500)}", e)
+                logcat(LogPriority.ERROR) { "GeminiTranslator: Failed to parse response as JSON: $responseText" }
+                throw Exception("Gemini API returned invalid JSON. Response: ${responseText.take(500)}", e)
             }
             var totalBlocks = 0
             var translatedBlocks = 0
@@ -205,5 +208,41 @@ class GeminiTranslator(
     }
 
     override fun close() {
+    }
+
+    companion object {
+        /**
+         * Strips markdown code block formatting from a string.
+         * Gemini sometimes wraps JSON responses in ```json ... ``` blocks.
+         */
+        private fun stripMarkdownCodeBlock(text: String): String {
+            val trimmed = text.trim()
+
+            // Check for ```json or ``` at the start
+            val codeBlockPattern = Regex("""^```(?:json)?\s*\n?([\s\S]*?)\n?```$""")
+            val match = codeBlockPattern.find(trimmed)
+            if (match != null) {
+                logcat { "GeminiTranslator: Stripped markdown code block from response" }
+                return match.groupValues[1].trim()
+            }
+
+            // Also handle case where only opening ``` is present (incomplete response)
+            if (trimmed.startsWith("```json") || trimmed.startsWith("```")) {
+                val startIndex = trimmed.indexOf('\n')
+                if (startIndex != -1) {
+                    val withoutOpening = trimmed.substring(startIndex + 1)
+                    val endIndex = withoutOpening.lastIndexOf("```")
+                    val result = if (endIndex != -1) {
+                        withoutOpening.substring(0, endIndex)
+                    } else {
+                        withoutOpening
+                    }
+                    logcat { "GeminiTranslator: Stripped partial markdown code block from response" }
+                    return result.trim()
+                }
+            }
+
+            return trimmed
+        }
     }
 }
