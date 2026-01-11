@@ -1,12 +1,17 @@
 package eu.kanade.presentation.reader.settings
 
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
@@ -19,9 +24,9 @@ import tachiyomi.presentation.core.util.collectAsState as collectAsStatePref
 /**
  * Translation settings page for the reader settings dialog.
  *
- * Displays profile-specific settings that can be adjusted in real-time
- * while viewing a translated chapter. Settings are global (CJK profile
- * or Latin profile) and apply to all chapters with the same profile type.
+ * Displays BOTH CJK and Latin profile settings that can be adjusted in real-time
+ * while viewing a translated chapter. Settings are global and apply to all chapters
+ * with the same profile type.
  */
 @Composable
 internal fun ColumnScope.TranslationPage(screenModel: ReaderSettingsScreenModel) {
@@ -38,28 +43,37 @@ internal fun ColumnScope.TranslationPage(screenModel: ReaderSettingsScreenModel)
         return
     }
 
-    // Show active profile
+    // Show currently active profile indicator
     Text(
         text = stringResource(ATMR.strings.pref_translation_profile_active) + ": " +
             when (profileType) {
                 ProfileType.CJK -> stringResource(ATMR.strings.pref_translation_profile_cjk)
                 ProfileType.LATIN -> stringResource(ATMR.strings.pref_translation_profile_latin)
             },
-        style = MaterialTheme.typography.titleSmall,
+        style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
     )
 
-    // Show appropriate sliders based on profile type
-    when (profileType) {
-        ProfileType.CJK -> CJKProfileSettings(screenModel)
-        ProfileType.LATIN -> LatinProfileSettings(screenModel)
-    }
+    // Show BOTH profiles (CJK and Latin)
+    CJKProfileSettings(screenModel)
+
+    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+    LatinProfileSettings(screenModel)
 }
 
 @Composable
 private fun ColumnScope.CJKProfileSettings(screenModel: ReaderSettingsScreenModel) {
     val prefs = screenModel.translationPreferences
+
+    // Section header
+    Text(
+        text = stringResource(ATMR.strings.pref_translation_profile_cjk),
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    )
 
     val textMarginPref = prefs.cjkTextMargin()
     val textMargin by textMarginPref.collectAsStatePref()
@@ -96,11 +110,29 @@ private fun ColumnScope.CJKProfileSettings(screenModel: ReaderSettingsScreenMode
         min = 50,
         max = 95,
     )
+
+    // Reset button
+    TextButton(
+        onClick = { prefs.resetCJKDefaults() },
+        modifier = Modifier
+            .align(Alignment.End)
+            .padding(horizontal = 8.dp),
+    ) {
+        Text("Reset CJK")
+    }
 }
 
 @Composable
 private fun ColumnScope.LatinProfileSettings(screenModel: ReaderSettingsScreenModel) {
     val prefs = screenModel.translationPreferences
+
+    // Section header
+    Text(
+        text = stringResource(ATMR.strings.pref_translation_profile_latin),
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    )
 
     val textMarginPref = prefs.latinTextMargin()
     val textMargin by textMarginPref.collectAsStatePref()
@@ -161,4 +193,14 @@ private fun ColumnScope.LatinProfileSettings(screenModel: ReaderSettingsScreenMo
         min = 2,
         max = 10,
     )
+
+    // Reset button
+    TextButton(
+        onClick = { prefs.resetLatinDefaults() },
+        modifier = Modifier
+            .align(Alignment.End)
+            .padding(horizontal = 8.dp),
+    ) {
+        Text("Reset Latin")
+    }
 }

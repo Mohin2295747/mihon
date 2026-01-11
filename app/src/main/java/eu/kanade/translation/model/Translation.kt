@@ -31,6 +31,25 @@ data class Translation(
             _statusFlow.value = status
         }
 
+    @Transient
+    private val _errorMessageFlow = MutableStateFlow<String?>(null)
+
+    @Transient
+    val errorMessageFlow = _errorMessageFlow.asStateFlow()
+    var errorMessage: String?
+        get() = _errorMessageFlow.value
+        set(message) {
+            _errorMessageFlow.value = message
+        }
+
+    /**
+     * Set error state with a message for user display.
+     */
+    fun setError(message: String) {
+        errorMessage = message
+        status = State.ERROR
+    }
+
     enum class State(val value: Int) {
         NOT_TRANSLATED(0),
         QUEUE(1),

@@ -184,4 +184,42 @@ class TranslationPreferences(
             ProfileType.LATIN -> latinProfileChanges()
         }
     }
+
+    // ============================================================================
+    // Reset to Defaults
+    // ============================================================================
+
+    companion object {
+        // CJK Default Values
+        const val DEFAULT_CJK_TEXT_MARGIN = 2
+        const val DEFAULT_CJK_PADDING_MULTIPLIER = 115
+        const val DEFAULT_CJK_OVAL_HEIGHT_MARGIN = 70
+
+        // Latin Default Values
+        const val DEFAULT_LATIN_TEXT_MARGIN = 2
+        const val DEFAULT_LATIN_PADDING_MULTIPLIER = 100
+        const val DEFAULT_LATIN_OVAL_HEIGHT_MARGIN = 95
+        const val DEFAULT_LATIN_HORIZONTAL_PADDING = 6
+        const val DEFAULT_LATIN_VERTICAL_PADDING = 4
+    }
+
+    /**
+     * Reset all CJK display settings to their default values.
+     */
+    fun resetCJKDefaults() {
+        cjkTextMargin().set(DEFAULT_CJK_TEXT_MARGIN)
+        cjkPaddingMultiplier().set(DEFAULT_CJK_PADDING_MULTIPLIER)
+        cjkOvalHeightMargin().set(DEFAULT_CJK_OVAL_HEIGHT_MARGIN)
+    }
+
+    /**
+     * Reset all Latin display settings to their default values.
+     */
+    fun resetLatinDefaults() {
+        latinTextMargin().set(DEFAULT_LATIN_TEXT_MARGIN)
+        latinPaddingMultiplier().set(DEFAULT_LATIN_PADDING_MULTIPLIER)
+        latinOvalHeightMargin().set(DEFAULT_LATIN_OVAL_HEIGHT_MARGIN)
+        latinHorizontalPadding().set(DEFAULT_LATIN_HORIZONTAL_PADDING)
+        latinVerticalPadding().set(DEFAULT_LATIN_VERTICAL_PADDING)
+    }
 }

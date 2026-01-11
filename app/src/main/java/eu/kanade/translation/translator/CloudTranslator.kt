@@ -172,11 +172,22 @@ class CloudTranslator(
                             }
                         }
 
-                        // Remove watermark blocks (blocks containing "RTMTH" or common watermark patterns)
-                        pageTranslation.blocks = blocks.filterNot {
-                            it.translation.contains("RTMTH", ignoreCase = true) ||
-                            it.translation.matches(Regex(".*\\.(com|org|net|io).*", RegexOption.IGNORE_CASE))
+                        // Remove watermark blocks (blocks containing "RTMTH" or actual URL watermarks)
+                        val originalSize = blocks.size
+                        pageTranslation.blocks = blocks.filterNot { block ->
+                            val text = block.translation
+                            // Only filter RTMTH marker (set by AI translators for watermarks)
+                            text.contains("RTMTH", ignoreCase = true) ||
+                            // Only filter actual URLs/domains (not text that happens to contain ".com")
+                            // Must be standalone URL-like pattern: http://, www., or isolated domain
+                            text.matches(Regex("""^(https?://|www\.)?[\w.-]+\.(com|org|net|io)(/\S*)?$""", RegexOption.IGNORE_CASE)) ||
+                            text.matches(Regex("""^\s*@?\w+\.(com|org|net|io)\s*$""", RegexOption.IGNORE_CASE))
                         }.toMutableList()
+
+                        val removedWatermarks = originalSize - pageTranslation.blocks.size
+                        if (removedWatermarks > 0) {
+                            logcat { "CloudTranslator: Removed $removedWatermarks watermark blocks from page $pageKey" }
+                        }
 
                     } catch (e: Exception) {
                         logcat(LogPriority.ERROR) {

@@ -170,6 +170,13 @@ object SettingsTranslationScreen : SearchableSettings {
                         true
                     },
                 ),
+                Preference.PreferenceItem.TextPreference(
+                    title = "Reset CJK to Defaults",
+                    subtitle = "Margin: 2px, Padding: 115%, Oval: 70%",
+                    onClick = {
+                        translationPreferences.resetCJKDefaults()
+                    },
+                ),
             ),
         )
     }
@@ -213,6 +220,17 @@ object SettingsTranslationScreen : SearchableSettings {
                     },
                 ),
                 Preference.PreferenceItem.SliderPreference(
+                    value = latinPadding,
+                    min = 100,
+                    max = 150,
+                    title = "Padding Multiplier",
+                    subtitle = "Symbol padding: ${latinPadding}%",
+                    onValueChanged = {
+                        latinPaddingPref.set(it)
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.SliderPreference(
                     value = latinOvalHeight,
                     min = 70,
                     max = 99,
@@ -243,6 +261,13 @@ object SettingsTranslationScreen : SearchableSettings {
                     onValueChanged = {
                         latinVerticalPaddingPref.set(it)
                         true
+                    },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = "Reset Latin to Defaults",
+                    subtitle = "Margin: 2px, Padding: 100%, Oval: 95%, H: 6dp, V: 4dp",
+                    onClick = {
+                        translationPreferences.resetLatinDefaults()
                     },
                 ),
             ),

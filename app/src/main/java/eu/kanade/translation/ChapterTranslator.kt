@@ -248,8 +248,14 @@ class ChapterTranslator(
             Json.encodeToStream(pages, translationMangaDir.createFile(saveFile)!!.openOutputStream())
             translation.status = Translation.State.TRANSLATED
         } catch (error: Throwable) {
-            translation.status = Translation.State.ERROR
+            val errorMessage = error.message ?: "Unknown translation error"
+            translation.setError(errorMessage)
             logcat(LogPriority.ERROR, error)
+
+            // Show toast notification to user on main thread
+            withContext(Dispatchers.Main) {
+                context.toast("Translation failed: $errorMessage")
+            }
         }
     }
 
