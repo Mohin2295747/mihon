@@ -59,6 +59,7 @@
     <string name="pref_short_update_categories_count">%d categories selected</string>
 
     <string name="notification_short_updating_progress">Short update: %s</string>
+    <string name="updating_short_library">Running short update…</string>
     <string name="notification_short_new_chapters">Short update - New chapters</string>
 
     <!-- Actions -->

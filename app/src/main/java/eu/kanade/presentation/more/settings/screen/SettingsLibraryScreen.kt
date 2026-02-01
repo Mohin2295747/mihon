@@ -19,6 +19,7 @@ import eu.kanade.presentation.category.visualName
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.widget.TriStateListDialog
 import eu.kanade.tachiyomi.data.library.LibraryUpdateJob
+import eu.kanade.tachiyomi.data.library.ShortUpdateJob
 import eu.kanade.tachiyomi.ui.category.CategoryScreen
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
@@ -270,8 +271,7 @@ private fun getShortUpdateGroup(
                 onClick = { showCategoriesDialog = true },
             ),
             Preference.PreferenceItem.InfoPreference(
-                title = stringResource(MR.strings.pref_short_update_info),
-                subtitle = stringResource(MR.strings.pref_short_update_info_summary),
+                title = stringResource(MR.strings.pref_short_update_info_summary),
             ),
         ),
     )

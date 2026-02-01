@@ -111,6 +111,14 @@ data object UpdatesTab : Tab {
                         }
                         screenModel.snackbarHostState.showSnackbar(context.stringResource(msg))
                     }
+                    is Event.ShortUpdateTriggered -> {
+                        val msg = if (event.started) {
+                            MR.strings.updating_short_library
+                        } else {
+                            MR.strings.update_already_running
+                        }
+                        screenModel.snackbarHostState.showSnackbar(context.stringResource(msg))
+                    }
                 }
             }
         }

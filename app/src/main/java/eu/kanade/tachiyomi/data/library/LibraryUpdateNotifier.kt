@@ -91,15 +91,15 @@ class LibraryUpdateNotifier(
      * @param total the total progress.
      */
     fun showProgressNotification(manga: List<Manga>, current: Int, total: Int) {
-        val title = if (isShortUpdate) {
-        context.stringResource(MR.strings.notification_short_updating_progress)
+        val titleRes = if (isShortUpdate) {
+            MR.strings.notification_short_updating_progress
         } else {
-            context.stringResource(MR.strings.notification_updating_progress)
+            MR.strings.notification_updating_progress
         }
         progressNotificationBuilder
             .setContentTitle(
                 context.stringResource(
-                    title,
+                    titleRes,
                     percentFormatter.format(current.toFloat() / total),
                 ),
             )
