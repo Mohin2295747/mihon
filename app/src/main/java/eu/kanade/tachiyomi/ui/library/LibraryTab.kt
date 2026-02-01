@@ -37,6 +37,7 @@ import eu.kanade.presentation.more.onboarding.GETTING_STARTED_URL
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.library.LibraryUpdateJob
+import eu.kanade.tachiyomi.data.library.ShortUpdateJob
 import eu.kanade.tachiyomi.ui.browse.source.globalsearch.GlobalSearchScreen
 import eu.kanade.tachiyomi.ui.category.CategoryScreen
 import eu.kanade.tachiyomi.ui.home.HomeScreen
@@ -123,6 +124,16 @@ data object LibraryTab : Tab {
                     onClickFilter = screenModel::showSettingsDialog,
                     onClickRefresh = { onClickRefresh(state.activeCategory) },
                     onClickGlobalUpdate = { onClickRefresh(null) },
+                    onClickShortUpdate = {
+                        val started = ShortUpdateJob.startNow(context)
+                        scope.launch {
+                            val msgRes = when {
+                                !started -> MR.strings.update_already_running
+                                else -> MR.strings.updating_library
+                            }
+                            snackbarHostState.showSnackbar(context.stringResource(msgRes))
+                        }
+                    },
                     onClickOpenRandomManga = {
                         scope.launch {
                             val randomItem = screenModel.getRandomLibraryItemForCurrentCategory()

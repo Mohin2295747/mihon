@@ -48,6 +48,18 @@
 
     <string name="unlock_app_title">Unlock %s</string>
     <string name="confirm_lock_change">Authenticate to confirm change</string>
+    
+    <string name="pref_category_short_update">Short Update</string>
+    <string name="pref_short_update_interval">Short update interval</string>
+    <string name="pref_short_update_categories_details">Manga from selected categories will be updated without any smart restrictions.</string>
+    <string name="pref_short_update_info">Short Update Information</string>
+    <string name="pref_short_update_info_summary">Updates manga in selected categories only. Ignores all smart update restrictions.</string>
+    <string name="pref_short_update_categories_none">None selected</string>
+    <string name="pref_short_update_categories_all">All categories</string>
+    <string name="pref_short_update_categories_count">%d categories selected</string>
+
+    <string name="notification_short_updating_progress">Short update: %s</string>
+    <string name="notification_short_new_chapters">Short update - New chapters</string>
 
     <!-- Actions -->
     <string name="action_settings">Settings</string>
@@ -86,6 +98,7 @@
     <string name="action_remove_bookmark">Unbookmark chapter</string>
     <string name="action_delete">Delete</string>
     <string name="action_update_library">Update library</string>
+    <string name="action_short_update_library">Short update</string>
     <string name="action_enable_all">Enable all</string>
     <string name="action_disable_all">Disable all</string>
     <string name="action_edit">Edit</string>

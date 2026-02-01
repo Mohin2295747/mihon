@@ -192,6 +192,13 @@ class UpdatesScreenModel(
         return started
     }
 
+    fun updateShortLibrary(): Boolean {
+        val started = ShortUpdateJob.startNow(Injekt.get<Application>())
+        screenModelScope.launch {
+            _events.send(Event.ShortUpdateTriggered(started))
+        }
+        return started
+    }
     /**
      * Update status of chapters.
      *
@@ -483,6 +490,7 @@ class UpdatesScreenModel(
     sealed interface Event {
         data object InternalError : Event
         data class LibraryUpdateTriggered(val started: Boolean) : Event
+        data class ShortUpdateTriggered(val started: Boolean) : Event
     }
 }
 

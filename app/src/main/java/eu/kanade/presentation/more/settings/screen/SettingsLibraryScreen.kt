@@ -59,6 +59,7 @@ object SettingsLibraryScreen : SearchableSettings {
         return listOf(
             getCategoriesGroup(LocalNavigator.currentOrThrow, allCategories, libraryPreferences),
             getGlobalUpdateGroup(allCategories, libraryPreferences),
+            getShortUpdateGroup(allCategories, libraryPreferences),
             getBehaviorGroup(libraryPreferences),
         )
     }
@@ -211,6 +212,94 @@ object SettingsLibraryScreen : SearchableSettings {
         )
     }
 
+    @Composable
+private fun getShortUpdateGroup(
+    allCategories: List<Category>,
+    libraryPreferences: LibraryPreferences,
+): Preference.PreferenceGroup {
+    val context = LocalContext.current
+
+    val shortUpdateIntervalPref = libraryPreferences.shortUpdateInterval()
+    val shortUpdateCategoriesPref = libraryPreferences.shortUpdateCategories()
+
+    val shortUpdateInterval by shortUpdateIntervalPref.collectAsState()
+    val selectedCategories by shortUpdateCategoriesPref.collectAsState()
+
+    var showCategoriesDialog by rememberSaveable { mutableStateOf(false) }
+    if (showCategoriesDialog) {
+        TriStateListDialog(
+            title = stringResource(MR.strings.categories),
+            message = stringResource(MR.strings.pref_short_update_categories_details),
+            items = allCategories,
+            initialChecked = selectedCategories.mapNotNull { id -> allCategories.find { it.id.toString() == id } },
+            initialInversed = emptyList(),
+            itemLabel = { it.visualName },
+            onDismissRequest = { showCategoriesDialog = false },
+            onValueChanged = { newIncluded, newExcluded ->
+                // Short update only uses inclusion, not exclusion
+                shortUpdateCategoriesPref.set(newIncluded.map { it.id.toString() }.toSet())
+                showCategoriesDialog = false
+            },
+        )
+    }
+
+    return Preference.PreferenceGroup(
+        title = stringResource(MR.strings.pref_category_short_update),
+        preferenceItems = persistentListOf(
+            Preference.PreferenceItem.ListPreference(
+                preference = shortUpdateIntervalPref,
+                entries = persistentMapOf(
+                    0 to stringResource(MR.strings.update_never),
+                    LibraryPreferences.SHORT_UPDATE_INTERVAL_6H to stringResource(MR.strings.update_6hour),
+                    LibraryPreferences.SHORT_UPDATE_INTERVAL_12H to stringResource(MR.strings.update_12hour),
+                    LibraryPreferences.SHORT_UPDATE_INTERVAL_24H to stringResource(MR.strings.update_24hour),
+                    LibraryPreferences.SHORT_UPDATE_INTERVAL_WEEK to stringResource(MR.strings.update_weekly),
+                ),
+                title = stringResource(MR.strings.pref_short_update_interval),
+                onValueChanged = {
+                    ShortUpdateJob.setupTask(context, it)
+                    true
+                },
+            ),
+            Preference.PreferenceItem.TextPreference(
+                title = stringResource(MR.strings.categories),
+                subtitle = getShortUpdateCategoriesLabel(
+                    allCategories = allCategories,
+                    selected = selectedCategories,
+                ),
+                onClick = { showCategoriesDialog = true },
+            ),
+            Preference.PreferenceItem.InfoPreference(
+                title = stringResource(MR.strings.pref_short_update_info),
+                subtitle = stringResource(MR.strings.pref_short_update_info_summary),
+            ),
+        ),
+    )
+}
+
+    @Composable
+    private fun getShortUpdateCategoriesLabel(
+        allCategories: List<Category>,
+        selected: Set<String>,
+    ): String {
+        return when {
+            selected.isEmpty() -> stringResource(MR.strings.pref_short_update_categories_none)
+            selected.size == allCategories.size -> stringResource(MR.strings.pref_short_update_categories_all)
+            else -> {
+                val selectedNames = selected.mapNotNull { id ->
+                    allCategories.find { it.id.toString() == id }?.visualName
+                }
+                if (selectedNames.size <= 3) {
+                    selectedNames.joinToString()
+                } else {
+                    stringResource(
+                        MR.strings.pref_short_update_categories_count,
+                        selected.size,
+                    )
+                }
+            }
+        }
+    }
     @Composable
     private fun getBehaviorGroup(
         libraryPreferences: LibraryPreferences,

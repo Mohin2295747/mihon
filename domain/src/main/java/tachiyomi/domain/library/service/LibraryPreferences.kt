@@ -33,7 +33,12 @@ class LibraryPreferences(
     fun landscapeColumns() = preferenceStore.getInt("pref_library_columns_landscape_key", 0)
 
     fun lastUpdatedTimestamp() = preferenceStore.getLong(Preference.appStateKey("library_update_last_timestamp"), 0L)
+
     fun autoUpdateInterval() = preferenceStore.getInt("pref_library_update_interval_key", 0)
+
+    fun shortUpdateInterval() = preferenceStore.getInt("pref_short_update_interval_key", 0)
+
+    fun shortUpdateCategories() = preferenceStore.getStringSet("short_update_categories", emptySet())
 
     fun autoUpdateDeviceRestrictions() = preferenceStore.getStringSet(
         "library_update_restriction",
@@ -224,5 +229,11 @@ class LibraryPreferences(
             LIBRARY_UPDATE_CATEGORIES_PREF_KEY,
             LIBRARY_UPDATE_CATEGORIES_EXCLUDE_PREF_KEY,
         )
+
+        // Short update constants
+        const val SHORT_UPDATE_INTERVAL_6H = 6
+        const val SHORT_UPDATE_INTERVAL_12H = 12
+        const val SHORT_UPDATE_INTERVAL_24H = 24
+        const val SHORT_UPDATE_INTERVAL_WEEK = 168
     }
 }

@@ -9,6 +9,11 @@
         <item quantity="one">Yesterday</item>
         <item quantity="other">%1$d days ago</item>
     </plurals>
+    
+    <plurals name="notification_short_new_chapters_summary">
+        <item quantity="one">%d new chapter from short update</item>
+        <item quantity="other">%d new chapters from short update</item>
+    </plurals>
 
     <plurals name="upcoming_relative_time">
         <item quantity="one">Tomorrow</item>

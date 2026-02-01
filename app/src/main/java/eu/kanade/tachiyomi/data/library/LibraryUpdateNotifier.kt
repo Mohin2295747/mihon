@@ -48,6 +48,7 @@ class LibraryUpdateNotifier(
     private val securityPreferences: SecurityPreferences = Injekt.get(),
     private val sourceManager: SourceManager = Injekt.get(),
 ) {
+    private var isShortUpdate: Boolean = false
 
     private val percentFormatter = NumberFormat.getPercentInstance().apply {
         roundingMode = RoundingMode.DOWN
@@ -90,10 +91,15 @@ class LibraryUpdateNotifier(
      * @param total the total progress.
      */
     fun showProgressNotification(manga: List<Manga>, current: Int, total: Int) {
+        val title = if (isShortUpdate) {
+        context.stringResource(MR.strings.notification_short_updating_progress)
+        } else {
+            context.stringResource(MR.strings.notification_updating_progress)
+        }
         progressNotificationBuilder
             .setContentTitle(
                 context.stringResource(
-                    MR.strings.notification_updating_progress,
+                    title,
                     percentFormatter.format(current.toFloat() / total),
                 ),
             )
@@ -139,6 +145,13 @@ class LibraryUpdateNotifier(
     }
 
     /**
+     * Sets whether this notifier is for short update.
+     */
+    fun setIsShortUpdate(isShortUpdate: Boolean) {
+        this.isShortUpdate = isShortUpdate
+    }
+
+    /**
      * Shows notification containing update entries that failed with action to open full log.
      *
      * @param failed Number of entries that failed to update.
@@ -172,13 +185,23 @@ class LibraryUpdateNotifier(
             Notifications.ID_NEW_CHAPTERS,
             Notifications.CHANNEL_NEW_CHAPTERS,
         ) {
-            setContentTitle(context.stringResource(MR.strings.notification_new_chapters))
+            val titleRes = if (isShortUpdate) {
+                MR.strings.notification_short_new_chapters
+            } else {
+                MR.strings.notification_new_chapters
+            }
+            setContentTitle(context.stringResource(titleRes))
             if (updates.size == 1 && !securityPreferences.hideNotificationContent().get()) {
                 setContentText(updates.first().first.title.chop(NOTIF_TITLE_MAX_LEN))
             } else {
+                val summaryRes = if (isShortUpdate) {
+                    MR.plurals.notification_short_new_chapters_summary
+                } else {
+                    MR.plurals.notification_new_chapters_summary
+                }
                 setContentText(
                     context.pluralStringResource(
-                        MR.plurals.notification_new_chapters_summary,
+                        summaryRes,
                         updates.size,
                         updates.size,
                     ),
