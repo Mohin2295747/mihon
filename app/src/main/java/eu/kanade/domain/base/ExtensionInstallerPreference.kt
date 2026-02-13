@@ -37,7 +37,7 @@ class ExtensionInstallerPreference(
             ExtensionInstaller.PACKAGEINSTALLER -> {
                 if (context.hasMiuiPackageInstaller) return ExtensionInstaller.LEGACY
             }
-            ExtensionInstaller.SHIZUKU -> {
+            ExtensionInstaller.SHIZUKU, ExtensionInstaller.SHIZUKU_REINSTALL -> {
                 if (!context.isShizukuInstalled) return defaultValue()
             }
             else -> {}

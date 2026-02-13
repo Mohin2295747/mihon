@@ -28,6 +28,7 @@ class BasePreferences(
         PACKAGEINSTALLER(MR.strings.ext_installer_packageinstaller, true),
         SHIZUKU(MR.strings.ext_installer_shizuku, false),
         PRIVATE(MR.strings.ext_installer_private, false),
+        SHIZUKU_REINSTALL(MR.strings.ext_installer_shizuku_reinstall, false),
     }
 
     fun displayProfile() = preferenceStore.getString("pref_display_profile_key", "")
