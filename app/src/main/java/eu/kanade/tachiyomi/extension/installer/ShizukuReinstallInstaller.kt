@@ -131,7 +131,6 @@ class ShizukuReinstallInstaller(private val service: Service) : Installer(servic
                     val packageName = extractPackageName(entry.uri.toString())
                     if (packageName != null) {
                         logcat { "Signature mismatch detected for $packageName, attempting uninstall and reinstall" }
-                        
                         // Uninstall the package first
                         val uninstallSuccess = uninstallPackage(packageName)
                         
