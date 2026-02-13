@@ -110,7 +110,6 @@ class ShizukuReinstallInstaller(private val service: Service) : Installer(servic
 
     override fun processEntry(entry: Entry) {
         super.processEntry(entry)
-        
         // Launch installation in coroutine to handle retry logic
         scope.launch {
             installWithRetry(entry)
@@ -121,7 +120,6 @@ class ShizukuReinstallInstaller(private val service: Service) : Installer(servic
         val result = try {
             // First attempt: normal install
             val firstAttempt = performInstall(entry)
-            
             if (firstAttempt) {
                 InstallStep.Installed
             } else {
@@ -133,7 +131,6 @@ class ShizukuReinstallInstaller(private val service: Service) : Installer(servic
                         logcat { "Signature mismatch detected for $packageName, attempting uninstall and reinstall" }
                         // Uninstall the package first
                         val uninstallSuccess = uninstallPackage(packageName)
-                        
                         if (uninstallSuccess) {
                             logcat { "Successfully uninstalled $packageName, retrying install" }
                             // Retry installation after uninstall
@@ -157,7 +154,6 @@ class ShizukuReinstallInstaller(private val service: Service) : Installer(servic
             logcat(LogPriority.ERROR, e) { "Failed to install extension ${entry.downloadId}" }
             InstallStep.Error
         }
-        
         withContext(Dispatchers.Main) {
             continueQueue(result)
         }

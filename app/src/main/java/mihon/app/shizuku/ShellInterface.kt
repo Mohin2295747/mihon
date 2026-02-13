@@ -157,12 +157,10 @@ class ShellInterface : IShellInterface.Stub() {
             val process = Runtime.getRuntime().exec(command)
             val output = process.inputStream.bufferedReader().readText()
             val error = process.errorStream.bufferedReader().readText()
-            
             if (error.isNotEmpty()) {
                 // Log error but still return output if there is any
                 android.util.Log.e("Shizuku", "Command error: $error")
             }
-            
             output.ifEmpty { null }
         } catch (e: Exception) {
             android.util.Log.e("Shizuku", "Failed to run command: $command", e)
