@@ -11,7 +11,6 @@ import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.extension.installer.Installer
 import eu.kanade.tachiyomi.extension.installer.PackageInstallerInstaller
 import eu.kanade.tachiyomi.extension.installer.ShizukuInstaller
-import eu.kanade.tachiyomi.extension.installer.ShizukuReinstallInstaller
 import eu.kanade.tachiyomi.extension.util.ExtensionInstaller.Companion.EXTRA_DOWNLOAD_ID
 import eu.kanade.tachiyomi.util.system.getSerializableExtraCompat
 import eu.kanade.tachiyomi.util.system.notificationBuilder
@@ -49,7 +48,6 @@ class ExtensionInstallService : Service() {
             installer = when (installerUsed) {
                 BasePreferences.ExtensionInstaller.PACKAGEINSTALLER -> PackageInstallerInstaller(this)
                 BasePreferences.ExtensionInstaller.SHIZUKU -> ShizukuInstaller(this)
-                BasePreferences.ExtensionInstaller.SHIZUKU_REINSTALL -> ShizukuReinstallInstaller(this)
                 else -> {
                     logcat(LogPriority.ERROR) { "Not implemented for installer $installerUsed" }
                     stopSelf()

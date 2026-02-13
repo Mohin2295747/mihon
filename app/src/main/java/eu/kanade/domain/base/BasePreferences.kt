@@ -20,6 +20,11 @@ class BasePreferences(
     fun incognitoMode() = preferenceStore.getBoolean(Preference.appStateKey("incognito_mode"), false)
 
     fun extensionInstaller() = ExtensionInstallerPreference(context, preferenceStore)
+    
+    fun shizukuReinstallOnFailure() = preferenceStore.getBoolean(
+        Preference.appStateKey("pref_shizuku_reinstall_on_failure"),
+        false,
+    )
 
     fun shownOnboardingFlow() = preferenceStore.getBoolean(Preference.appStateKey("onboarding_complete"), false)
 
@@ -28,7 +33,6 @@ class BasePreferences(
         PACKAGEINSTALLER(MR.strings.ext_installer_packageinstaller, true),
         SHIZUKU(MR.strings.ext_installer_shizuku, false),
         PRIVATE(MR.strings.ext_installer_private, false),
-        SHIZUKU_REINSTALL(MR.strings.ext_installer_shizuku_reinstall, false),
     }
 
     fun displayProfile() = preferenceStore.getString("pref_display_profile_key", "")
