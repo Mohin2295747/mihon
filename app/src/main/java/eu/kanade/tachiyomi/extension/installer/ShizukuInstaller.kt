@@ -34,7 +34,6 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val preferences = Injekt.get<BasePreferences>()
-    
     // Check if reinstall on failure is enabled
     private val reinstallOnFailure get() = preferences.shizukuReinstallOnFailure().get()
 
