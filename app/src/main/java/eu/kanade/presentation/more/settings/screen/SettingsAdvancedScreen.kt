@@ -446,6 +446,15 @@ object SettingsAdvancedScreen : SearchableSettings {
                         }
                     },
                 ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = basePreferences.shizukuReinstallOnFailure(),
+                    title = stringResource(MR.strings.pref_shizuku_reinstall_on_failure),
+                    subtitle = stringResource(MR.strings.pref_shizuku_reinstall_on_failure_summary),
+                    enabled = currentInstaller == BasePreferences.ExtensionInstaller.SHIZUKU,
+                    onValueChanged = {
+                        true
+                    },
+                ),
                 Preference.PreferenceItem.TextPreference(
                     title = stringResource(MR.strings.ext_revoke_trust),
                     onClick = {
