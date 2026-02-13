@@ -4,14 +4,10 @@ import android.app.Service
 import android.content.Intent
 import android.net.Uri
 import android.os.IBinder
-import eu.kanade.tachiyomi.extension.model.InstallStep
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
-import logcat.LogPriority
-import tachiyomi.core.common.util.system.logcat
 
 class ShizukuReinstallInstallerService : Service() {
 
