@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.extension.installer
 
 import android.app.Service
 import android.content.Intent
+import android.net.Uri
 import android.os.IBinder
 import eu.kanade.tachiyomi.extension.model.InstallStep
 import kotlinx.coroutines.CoroutineScope
@@ -14,8 +15,8 @@ import tachiyomi.core.common.util.system.logcat
 
 class ShizukuReinstallInstallerService : Service() {
 
-    private lateinit var downloadId: Long
-    private lateinit var uri: android.net.Uri
+    private var downloadId: Long = -1L
+    private lateinit var uri: Uri
     private lateinit var installer: ShizukuReinstallInstaller
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -27,7 +28,7 @@ class ShizukuReinstallInstallerService : Service() {
         if (intent == null) return START_NOT_STICKY
 
         downloadId = intent.getLongExtra(EXTRA_DOWNLOAD_ID, -1)
-        uri = android.net.Uri.parse(intent.getStringExtra(EXTRA_URI))
+        uri = Uri.parse(intent.getStringExtra(EXTRA_URI))
 
         installer = ShizukuReinstallInstaller(this)
         installer.addToQueue(downloadId, uri)

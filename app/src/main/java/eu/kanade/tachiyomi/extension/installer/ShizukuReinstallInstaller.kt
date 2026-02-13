@@ -229,4 +229,3 @@ class ShizukuReinstallInstaller(private val service: Service) : Installer(servic
 }
 
 private const val SHIZUKU_PERMISSION_REQUEST_CODE = 14046
-const val ACTION_INSTALL_RESULT = "${BuildConfig.APPLICATION_ID}.ACTION_INSTALL_RESULT"
