@@ -67,7 +67,6 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, Int.MIN_VALUE)
-            val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
             val packageName = intent.getStringExtra(PackageInstaller.EXTRA_PACKAGE_NAME)
 
             if (packageName != null) {
@@ -75,7 +74,6 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
                 if (status == PackageInstaller.STATUS_SUCCESS) {
                     deferred?.complete(true)
                 } else {
-                    logcat(LogPriority.ERROR) { "Failed to install extension $packageName: $message" }
                     deferred?.complete(false)
                 }
             }
@@ -83,7 +81,6 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
     }
 
     private val shizukuDeadListener = Shizuku.OnBinderDeadListener {
-        logcat { "Shizuku was killed prematurely" }
         service.stopSelf()
     }
 
@@ -104,7 +101,6 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
     fun initShizuku() {
         if (ready) return
         if (!Shizuku.pingBinder()) {
-            logcat(LogPriority.ERROR) { "Shizuku is not ready to use" }
             service.toast(MR.strings.ext_installer_shizuku_stopped)
             service.stopSelf()
             return
@@ -135,26 +131,18 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
     private suspend fun installWithRetry(entry: Entry): Boolean {
         val packageName = extractPackageName(entry.uri.toString()) ?: return false
 
-        var success = performInstall(entry)
+        var success = install(entry)
 
         if (!success && reinstallOnFailure) {
-            logcat { "First attempt failed for $packageName, trying uninstall and retry" }
-
-            val uninstallSuccess = uninstallPackage(packageName)
-
-            if (uninstallSuccess) {
-                logcat { "Uninstall successful, retrying installation" }
-                kotlinx.coroutines.delay(1000)
-                success = performInstall(entry)
-            } else {
-                logcat { "Uninstall failed for $packageName" }
-            }
+            uninstallPackage(packageName)
+            kotlinx.coroutines.delay(1000)
+            success = install(entry)
         }
 
         return success
     }
 
-    private suspend fun performInstall(entry: Entry): Boolean {
+    private suspend fun install(entry: Entry): Boolean {
         val packageName = extractPackageName(entry.uri.toString()) ?: return false
 
         val deferred = CompletableDeferred<Boolean>()
@@ -169,21 +157,18 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
                 deferred.await()
             } ?: false
         } catch (e: Exception) {
-            logcat(LogPriority.ERROR, e) { "Install exception for ${entry.downloadId}" }
             false
         } finally {
             pendingInstallations.remove(packageName)
         }
     }
 
-    private suspend fun uninstallPackage(packageName: String): Boolean {
-        return withContext(Dispatchers.IO) {
+    private suspend fun uninstallPackage(packageName: String) {
+        withContext(Dispatchers.IO) {
             try {
-                val result = shellInterface?.runCommand("pm uninstall $packageName")
-                result?.contains("Success") == true
+                shellInterface?.runCommand("pm uninstall $packageName")
             } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to uninstall $packageName" }
-                false
+                // Ignore
             }
         }
     }
@@ -212,11 +197,10 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
             try {
                 Shizuku.unbindUserService(shizukuArgs, connection, true)
             } catch (e: Exception) {
-                logcat(LogPriority.WARN, e) { "Failed to unbind shizuku service" }
+                // Ignore
             }
         }
         service.unregisterReceiver(receiver)
-        logcat { "ShizukuInstaller destroy" }
         scope.cancel()
         super.onDestroy()
     }
