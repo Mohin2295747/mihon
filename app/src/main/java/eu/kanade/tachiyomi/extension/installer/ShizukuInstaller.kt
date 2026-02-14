@@ -40,7 +40,7 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
     private val reinstallOnFailure get() = preferences.shizukuReinstallOnFailure().get()
 
     private var shellInterface: IShellInterface? = null
-    
+
     // Map to track installation results
     private val pendingInstallations = mutableMapOf<String, CompletableDeferred<Boolean>>()
 
@@ -165,16 +165,16 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
     private suspend fun installWithRetry(entry: Entry): Boolean {
         // First attempt
         var success = performInstallWithResult(entry)
-        
+
         if (!success) {
             // Try reinstall strategy
             val packageName = extractPackageName(entry.uri.toString())
             if (packageName != null) {
                 logcat { "Installation failed for $packageName, attempting uninstall and reinstall" }
-                
+
                 // Uninstall the package
                 val uninstallSuccess = uninstallPackage(packageName)
-                
+
                 if (uninstallSuccess) {
                     logcat { "Successfully uninstalled $packageName, retrying install" }
                     // Retry installation
@@ -182,7 +182,7 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
                 }
             }
         }
-        
+
         return success
     }
 
