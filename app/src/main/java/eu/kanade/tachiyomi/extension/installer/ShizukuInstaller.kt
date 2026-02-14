@@ -167,7 +167,7 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
             // Compare signatures if installed
             if (installedInfo != null) {
                 val installedSignatures = installedInfo.signatures
-                
+
                 // Handle null signatures safely
                 if (apkSignatures != null && installedSignatures != null) {
                     val signaturesMatch = apkSignatures.size == installedSignatures.size &&
