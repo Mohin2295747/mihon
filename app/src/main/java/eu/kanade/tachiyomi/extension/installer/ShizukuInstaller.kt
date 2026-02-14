@@ -15,14 +15,12 @@ import eu.kanade.domain.base.BasePreferences
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.extension.model.InstallStep
 import eu.kanade.tachiyomi.util.system.toast
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import logcat.LogPriority
 import mihon.app.shizuku.IShellInterface
 import mihon.app.shizuku.ShellInterface
@@ -31,7 +29,7 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import kotlin.time.Duration.Companion.seconds
+import java.io.File
 
 class ShizukuInstaller(private val service: Service) : Installer(service) {
 
@@ -40,7 +38,6 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
     private val reinstallOnFailure get() = preferences.shizukuReinstallOnFailure().get()
 
     private var shellInterface: IShellInterface? = null
-    private val pendingInstallations = mutableMapOf<String, CompletableDeferred<Boolean>>()
 
     private val shizukuArgs by lazy {
         Shizuku.UserServiceArgs(
@@ -67,20 +64,20 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, Int.MIN_VALUE)
+            val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
             val packageName = intent.getStringExtra(PackageInstaller.EXTRA_PACKAGE_NAME)
 
-            if (packageName != null) {
-                val deferred = pendingInstallations.remove(packageName)
-                if (status == PackageInstaller.STATUS_SUCCESS) {
-                    deferred?.complete(true)
-                } else {
-                    deferred?.complete(false)
-                }
+            if (status == PackageInstaller.STATUS_SUCCESS) {
+                continueQueue(InstallStep.Installed)
+            } else {
+                logcat(LogPriority.ERROR) { "Failed to install extension $packageName: $message" }
+                continueQueue(InstallStep.Error)
             }
         }
     }
 
     private val shizukuDeadListener = Shizuku.OnBinderDeadListener {
+        logcat { "Shizuku was killed prematurely" }
         service.stopSelf()
     }
 
@@ -101,6 +98,7 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
     fun initShizuku() {
         if (ready) return
         if (!Shizuku.pingBinder()) {
+            logcat(LogPriority.ERROR) { "Shizuku is not ready to use" }
             service.toast(MR.strings.ext_installer_shizuku_stopped)
             service.stopSelf()
             return
@@ -118,89 +116,120 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
 
     override fun processEntry(entry: Entry) {
         super.processEntry(entry)
-
-        scope.launch {
-            val success = installWithRetry(entry)
-
-            withContext(Dispatchers.Main) {
-                continueQueue(if (success) InstallStep.Installed else InstallStep.Error)
+        if (reinstallOnFailure) {
+            // Use reinstall logic if enabled
+            scope.launch {
+                installWithRetry(entry)
             }
-        }
-    }
-
-    private suspend fun installWithRetry(entry: Entry): Boolean {
-        val packageName = extractPackageName(entry.uri.toString()) ?: return false
-
-        var success = install(entry)
-
-        if (!success && reinstallOnFailure) {
-            uninstallPackage(packageName)
-            kotlinx.coroutines.delay(1000)
-            success = install(entry)
-        }
-
-        return success
-    }
-
-    private suspend fun install(entry: Entry): Boolean {
-        val packageName = extractPackageName(entry.uri.toString()) ?: return false
-
-        val deferred = CompletableDeferred<Boolean>()
-        pendingInstallations[packageName] = deferred
-
-        return try {
-            service.contentResolver.openAssetFileDescriptor(entry.uri, "r").use { fd ->
-                shellInterface?.install(fd)
-            }
-
-            withTimeoutOrNull(30.seconds) {
-                deferred.await()
-            } ?: false
-        } catch (e: Exception) {
-            false
-        } finally {
-            pendingInstallations.remove(packageName)
-        }
-    }
-
-    private suspend fun uninstallPackage(packageName: String) {
-        withContext(Dispatchers.IO) {
+        } else {
+            // Use normal installation
             try {
-                shellInterface?.runCommand("pm uninstall $packageName")
+                service.contentResolver.openAssetFileDescriptor(entry.uri, "r").use { fd ->
+                    shellInterface?.install(fd)
+                }
             } catch (e: Exception) {
-                // Ignore
+                logcat(LogPriority.ERROR, e) { "Failed to install extension ${entry.downloadId} ${entry.uri}" }
+                continueQueue(InstallStep.Error)
             }
         }
     }
 
-    private fun extractPackageName(uriString: String): String? {
-        val filename = uriString.substringAfterLast('/')
-        val nameWithoutExt = filename.removeSuffix(".apk")
-        return nameWithoutExt
-            .substringAfterLast('-', "")
-            .takeIf { it.isNotEmpty() }
-            ?: nameWithoutExt
-                .substringAfter('-', nameWithoutExt)
-                .substringBeforeLast('-')
-                .replace('-', '.')
+    private suspend fun installWithRetry(entry: Entry) {
+        var tempFile: File? = null
+        try {
+            // Copy APK to a temporary file for signature extraction
+            tempFile = File(service.cacheDir, "install_${System.currentTimeMillis()}.apk")
+            service.contentResolver.openInputStream(entry.uri)?.use { input ->
+                tempFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            } ?: throw Exception("Failed to open APK input stream")
+
+            // Extract package info and signatures from the APK
+            val apkInfo = service.packageManager.getPackageArchiveInfo(
+                tempFile.absolutePath,
+                PackageManager.GET_SIGNATURES
+            )
+            if (apkInfo == null) {
+                throw Exception("Failed to read APK package info")
+            }
+            val apkPackageName = apkInfo.packageName
+            val apkSignatures = apkInfo.signatures
+
+            // Check if the package is already installed
+            val installedInfo = try {
+                service.packageManager.getPackageInfo(apkPackageName, PackageManager.GET_SIGNATURES)
+            } catch (e: PackageManager.NameNotFoundException) {
+                null
+            }
+
+            // Compare signatures if installed
+            if (installedInfo != null) {
+                val installedSignatures = installedInfo.signatures
+                val signaturesMatch = apkSignatures.size == installedSignatures.size &&
+                    apkSignatures.zip(installedSignatures).all { (a, b) ->
+                        a.toByteArray().contentEquals(b.toByteArray())
+                    }
+
+                if (!signaturesMatch) {
+                    logcat { "Signatures differ for $apkPackageName, uninstalling existing package" }
+                    val uninstallSuccess = uninstallPackage(apkPackageName)
+                    if (!uninstallSuccess) {
+                        throw Exception("Failed to uninstall $apkPackageName")
+                    }
+                }
+            }
+
+            // Clean up temp file before installation
+            tempFile.delete()
+            tempFile = null
+
+            // Proceed with installation using the original content URI
+            service.contentResolver.openAssetFileDescriptor(entry.uri, "r")?.use { fd ->
+                shellInterface?.install(fd) ?: throw Exception("Shizuku shell interface not available")
+            } ?: throw Exception("Failed to open APK file descriptor")
+
+            // Installation initiated successfully; queue will continue via broadcast receiver
+            // Do NOT call continueQueue here - it will be called by the broadcast receiver
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e) { "Failed during pre-install steps for ${entry.downloadId}" }
+            // Clean up temp file if it exists
+            tempFile?.delete()
+            // Only continue queue with error if we haven't initiated installation
+            // The broadcast receiver will handle success/error for initiated installations
+            withContext(Dispatchers.Main) {
+                continueQueue(InstallStep.Error)
+            }
+        }
     }
 
+    private suspend fun uninstallPackage(packageName: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val result = shellInterface?.runCommand("pm uninstall $packageName")
+                result?.contains("Success") == true
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to uninstall $packageName" }
+                false
+            }
+        }
+    }
+
+    // Don't cancel if entry is already started installing
     override fun cancelEntry(entry: Entry): Boolean = getActiveEntry() != entry
 
     override fun onDestroy() {
-        pendingInstallations.values.forEach { it.complete(false) }
-        pendingInstallations.clear()
-
         Shizuku.removeBinderDeadListener(shizukuDeadListener)
         Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener)
         if (Shizuku.pingBinder()) {
             try {
                 Shizuku.unbindUserService(shizukuArgs, connection, true)
             } catch (e: Exception) {
-                // Ignore
+                logcat(LogPriority.WARN, e) { "Failed to unbind shizuku service" }
             }
         }
         service.unregisterReceiver(receiver)
+        logcat { "ShizukuInstaller destroy" }
         scope.cancel()
         super.onDestroy()
     }
