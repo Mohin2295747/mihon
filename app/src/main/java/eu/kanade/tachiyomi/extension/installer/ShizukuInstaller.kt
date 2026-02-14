@@ -147,7 +147,8 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
     }
 
     private suspend fun performInstallWithResult(entry: Entry): InstallResult {
-        val packageName = extractPackageName(entry.uri.toString()) ?: return InstallResult.Failure("Could not extract package name")
+        val packageName = extractPackageName(entry.uri.toString())
+            ?: return InstallResult.Failure("Could not extract package name")
 
         val deferred = CompletableDeferred<InstallResult>()
         pendingInstallations[packageName] = deferred
