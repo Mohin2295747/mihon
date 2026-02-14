@@ -74,6 +74,7 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
             if (packageName != null) {
                 val deferred = pendingInstallations.remove(packageName)
                 if (status == PackageInstaller.STATUS_SUCCESS) {
+                    logcat { "Installation success for $packageName" }
                     deferred?.complete(InstallResult.Success)
                 } else {
                     logcat(LogPriority.ERROR) { "Failed to install extension $packageName: $message" }
@@ -82,6 +83,7 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
                         message?.contains("signatures do not match") == true
 
                     if (isSignatureMismatch) {
+                        logcat { "Signature mismatch detected for $packageName, adding to retry set" }
                         signatureMismatchPackages.add(packageName)
                         deferred?.complete(InstallResult.SignatureMismatch(message ?: "Signature mismatch"))
                     } else {
@@ -134,13 +136,17 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
         super.processEntry(entry)
 
         scope.launch {
+            logcat { "Processing entry: ${entry.uri}" }
             val result = if (reinstallOnFailure) {
+                logcat { "Reinstall on failure enabled, using smart retry" }
                 installWithSmartRetry(entry)
             } else {
+                logcat { "Reinstall on failure disabled, single attempt only" }
                 performInstallWithResult(entry) is InstallResult.Success
             }
 
             withContext(Dispatchers.Main) {
+                logcat { "Install result: $result, continuing queue" }
                 continueQueue(if (result) InstallStep.Installed else InstallStep.Error)
             }
         }
@@ -150,14 +156,18 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
         val packageName = extractPackageName(entry.uri.toString())
             ?: return InstallResult.Failure("Could not extract package name")
 
+        logcat { "Performing install for package: $packageName" }
+
         val deferred = CompletableDeferred<InstallResult>()
         pendingInstallations[packageName] = deferred
 
         return try {
             service.contentResolver.openAssetFileDescriptor(entry.uri, "r").use { fd ->
+                logcat { "Starting installation via Shizuku" }
                 shellInterface?.install(fd)
             }
 
+            logcat { "Waiting for installation result with timeout" }
             withTimeoutOrNull(30.seconds) {
                 deferred.await()
             } ?: InstallResult.Failure("Installation timeout")
@@ -170,27 +180,41 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
     }
 
     private suspend fun installWithSmartRetry(entry: Entry): Boolean {
+        logcat { "Starting smart retry for entry" }
         val firstResult = performInstallWithResult(entry)
+        logcat { "First attempt result: $firstResult" }
 
         return when (firstResult) {
-            is InstallResult.Success -> true
+            is InstallResult.Success -> {
+                logcat { "First attempt succeeded" }
+                true
+            }
             is InstallResult.SignatureMismatch -> {
                 logcat { "Signature mismatch detected, attempting uninstall and reinstall" }
-                handleSignatureMismatch(entry)
+                val result = handleSignatureMismatch(entry)
+                logcat { "Signature mismatch handling result: $result" }
+                result
             }
             is InstallResult.Failure -> {
+                logcat { "Installation failed with message: ${firstResult.message}" }
                 if (reinstallOnFailure) {
-                    logcat { "Installation failed, attempting uninstall and reinstall: ${firstResult.message}" }
+                    logcat { "Reinstall on failure enabled, attempting uninstall and reinstall" }
                     val packageName = extractPackageName(entry.uri.toString())
                     if (packageName != null) {
+                        logcat { "Attempting to uninstall $packageName" }
                         val uninstallSuccess = uninstallPackage(packageName)
+                        logcat { "Uninstall result: $uninstallSuccess" }
                         if (uninstallSuccess) {
+                            logcat { "Waiting 500ms before retry" }
                             kotlinx.coroutines.delay(500)
-                            performInstallWithResult(entry) is InstallResult.Success
+                            val retryResult = performInstallWithResult(entry) is InstallResult.Success
+                            logcat { "Retry result: $retryResult" }
+                            retryResult
                         } else {
                             false
                         }
                     } else {
+                        logcat { "Could not extract package name" }
                         false
                     }
                 } else {
@@ -202,20 +226,26 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
 
     private suspend fun handleSignatureMismatch(entry: Entry): Boolean {
         val packageName = extractPackageName(entry.uri.toString()) ?: return false
+        logcat { "Handling signature mismatch for package: $packageName" }
 
         val actualPackageName = signatureMismatchPackages.firstOrNull {
             packageName.contains(it) || it.contains(packageName)
         } ?: packageName
 
-        logcat { "Handling signature mismatch for $actualPackageName" }
+        logcat { "Actual package name to uninstall: $actualPackageName" }
 
+        logcat { "Attempting to uninstall $actualPackageName" }
         val uninstallSuccess = uninstallPackage(actualPackageName)
+        logcat { "Uninstall result: $uninstallSuccess" }
 
         if (uninstallSuccess) {
-            logcat { "Successfully uninstalled $actualPackageName, retrying install" }
+            logcat { "Successfully uninstalled $actualPackageName, waiting 500ms before retry" }
             kotlinx.coroutines.delay(500)
             signatureMismatchPackages.remove(actualPackageName)
-            return performInstallWithResult(entry) is InstallResult.Success
+            logcat { "Retrying installation" }
+            val retryResult = performInstallWithResult(entry) is InstallResult.Success
+            logcat { "Retry result: $retryResult" }
+            return retryResult
         } else {
             logcat { "Failed to uninstall $actualPackageName" }
             return false
