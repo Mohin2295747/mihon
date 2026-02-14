@@ -208,8 +208,8 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
                 val result = shellInterface?.runCommand("pm uninstall $packageName")
                 result?.let {
                     it.contains("Success") ||
-                    it.contains("success") ||
-                    (it.contains("Failure") && it.contains("not installed"))
+                        it.contains("success") ||
+                        (it.contains("Failure") && it.contains("not installed"))
                 } == true
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR, e) { "Failed to uninstall $packageName" }
