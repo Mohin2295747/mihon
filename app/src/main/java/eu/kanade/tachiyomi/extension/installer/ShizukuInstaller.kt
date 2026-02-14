@@ -124,14 +124,14 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
 
     override fun processEntry(entry: Entry) {
         super.processEntry(entry)
-        
+
         scope.launch {
             val result = if (reinstallOnFailure) {
                 installWithRetry(entry)
             } else {
                 performInstallWithResult(entry)
             }
-            
+
             withContext(Dispatchers.Main) {
                 continueQueue(if (result) InstallStep.Installed else InstallStep.Error)
             }
@@ -140,7 +140,7 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
 
     private suspend fun performInstallWithResult(entry: Entry): Boolean {
         val packageName = extractPackageName(entry.uri.toString()) ?: return false
-        
+
         val deferred = CompletableDeferred<Boolean>()
         pendingInstallations[packageName] = deferred
 
@@ -212,7 +212,7 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
         // Cancel all pending installations
         pendingInstallations.values.forEach { it.complete(false) }
         pendingInstallations.clear()
-        
+
         Shizuku.removeBinderDeadListener(shizukuDeadListener)
         Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener)
         if (Shizuku.pingBinder()) {
