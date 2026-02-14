@@ -20,7 +20,7 @@ class BasePreferences(
     fun incognitoMode() = preferenceStore.getBoolean(Preference.appStateKey("incognito_mode"), false)
 
     fun extensionInstaller() = ExtensionInstallerPreference(context, preferenceStore)
-    
+
     fun shizukuReinstallOnFailure() = preferenceStore.getBoolean(
         Preference.appStateKey("pref_shizuku_reinstall_on_failure"),
         false,

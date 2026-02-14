@@ -190,10 +190,6 @@ internal class ExtensionInstaller(private val context: Context) {
 
                 tempFile.delete()
             }
-            BasePreferences.ExtensionInstaller.SHIZUKU_REINSTALL -> {
-                val intent = ExtensionInstallService.getIntent(context, downloadId, uri, installer)
-                ContextCompat.startForegroundService(context, intent)
-            }
             else -> {
                 val intent = ExtensionInstallService.getIntent(context, downloadId, uri, installer)
                 ContextCompat.startForegroundService(context, intent)

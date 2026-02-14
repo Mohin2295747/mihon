@@ -11,7 +11,6 @@ import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.IBinder
 import androidx.core.content.ContextCompat
-import eu.kanade.domain.base.BasePreferences
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.extension.model.InstallStep
 import eu.kanade.tachiyomi.util.system.toast
@@ -27,14 +26,10 @@ import mihon.app.shizuku.ShellInterface
 import rikka.shizuku.Shizuku
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.MR
-import uy.kohesive.injekt.Injekt
-import uy.kohesive.injekt.api.get
 
-class ShizukuInstaller(private val service: Service) : Installer(service) {
+class ShizukuReinstallInstaller(private val service: Service) : Installer(service) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val preferences = Injekt.get<BasePreferences>()
-    private val reinstallOnFailure get() = preferences.shizukuReinstallOnFailure().get()
 
     private var shellInterface: IShellInterface? = null
 
@@ -115,25 +110,12 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
 
     override fun processEntry(entry: Entry) {
         super.processEntry(entry)
-        if (reinstallOnFailure) {
-            // Use reinstall logic if enabled
-            scope.launch {
-                installWithRetry(entry)
-            }
-        } else {
-            // Use normal installation
-            try {
-                service.contentResolver.openAssetFileDescriptor(entry.uri, "r").use { fd ->
-                    shellInterface?.install(fd)
-                }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to install extension ${entry.downloadId} ${entry.uri}" }
-                continueQueue(InstallStep.Error)
-            }
+        // Launch installation in coroutine to handle retry logic
+        scope.launch {
+            installWithRetry(entry)
         }
     }
 
-    // New method for reinstall logic (only used when setting is enabled)
     private suspend fun installWithRetry(entry: Entry) {
         val result = try {
             // First attempt: normal install
@@ -141,16 +123,23 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
             if (firstAttempt) {
                 InstallStep.Installed
             } else {
-                // Try reinstall strategy
+                // Check if it's a signature mismatch
                 withContext(Dispatchers.Main) {
+                    // Extract package name from filename
                     val packageName = extractPackageName(entry.uri.toString())
                     if (packageName != null) {
-                        logcat { "Installation failed for $packageName, attempting uninstall and reinstall" }
+                        logcat { "Signature mismatch detected for $packageName, attempting uninstall and reinstall" }
+                        // Uninstall the package first
                         val uninstallSuccess = uninstallPackage(packageName)
                         if (uninstallSuccess) {
                             logcat { "Successfully uninstalled $packageName, retrying install" }
+                            // Retry installation after uninstall
                             val retrySuccess = performInstall(entry)
-                            if (retrySuccess) InstallStep.Installed else InstallStep.Error
+                            if (retrySuccess) {
+                                InstallStep.Installed
+                            } else {
+                                InstallStep.Error
+                            }
                         } else {
                             logcat(LogPriority.ERROR) { "Failed to uninstall $packageName" }
                             InstallStep.Error
@@ -187,6 +176,7 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
     private suspend fun uninstallPackage(packageName: String): Boolean {
         return withContext(Dispatchers.IO) {
             try {
+                // Use pm uninstall command through shell interface
                 val result = shellInterface?.runCommand("pm uninstall $packageName")
                 result?.contains("Success") == true
             } catch (e: Exception) {
@@ -197,6 +187,8 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
     }
 
     private fun extractPackageName(uriString: String): String? {
+        // Extract package name from the APK filename
+        // Common pattern: extension-name-v1.2.3.apk -> package name might be in the format
         return uriString.substringAfterLast('/')
             .substringBeforeLast('-')
             .replace('-', '.')
@@ -217,7 +209,7 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
             }
         }
         service.unregisterReceiver(receiver)
-        logcat { "ShizukuInstaller destroy" }
+        logcat { "ShizukuReinstallInstaller destroy" }
         scope.cancel()
         super.onDestroy()
     }
@@ -236,5 +228,4 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
     }
 }
 
-private const val SHIZUKU_PERMISSION_REQUEST_CODE = 14045
-const val ACTION_INSTALL_RESULT = "${BuildConfig.APPLICATION_ID}.ACTION_INSTALL_RESULT"
+private const val SHIZUKU_PERMISSION_REQUEST_CODE = 14046
