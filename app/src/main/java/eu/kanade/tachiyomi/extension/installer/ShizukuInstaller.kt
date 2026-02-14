@@ -9,6 +9,7 @@ import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
+import android.content.pm.Signature
 import android.os.IBinder
 import androidx.core.content.ContextCompat
 import eu.kanade.domain.base.BasePreferences
@@ -29,6 +30,7 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.io.File
 
 class ShizukuInstaller(private val service: Service) : Installer(service) {
 
@@ -133,53 +135,82 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
         }
     }
 
-    // New method for reinstall logic (only used when setting is enabled)
     private suspend fun installWithRetry(entry: Entry) {
-        val result = try {
-            // First attempt: normal install
-            val firstAttempt = performInstall(entry)
-            if (firstAttempt) {
-                InstallStep.Installed
-            } else {
-                // Try reinstall strategy
-                withContext(Dispatchers.Main) {
-                    val packageName = extractPackageName(entry.uri.toString())
-                    if (packageName != null) {
-                        logcat { "Installation failed for $packageName, attempting uninstall and reinstall" }
-                        val uninstallSuccess = uninstallPackage(packageName)
-                        if (uninstallSuccess) {
-                            logcat { "Successfully uninstalled $packageName, retrying install" }
-                            val retrySuccess = performInstall(entry)
-                            if (retrySuccess) InstallStep.Installed else InstallStep.Error
-                        } else {
-                            logcat(LogPriority.ERROR) { "Failed to uninstall $packageName" }
-                            InstallStep.Error
+        var tempFile: File? = null
+        try {
+            // Copy APK to a temporary file for signature extraction
+            tempFile = File(service.cacheDir, "install_${System.currentTimeMillis()}.apk")
+            service.contentResolver.openInputStream(entry.uri)?.use { input ->
+                tempFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            } ?: throw Exception("Failed to open APK input stream")
+
+            // Extract package info and signatures from the APK
+            val apkInfo = service.packageManager.getPackageArchiveInfo(
+                tempFile.absolutePath,
+                PackageManager.GET_SIGNATURES,
+            )
+            if (apkInfo == null) {
+                throw Exception("Failed to read APK package info")
+            }
+            val apkPackageName = apkInfo.packageName
+            val apkSignatures = apkInfo.signatures
+
+            // Check if the package is already installed
+            val installedInfo = try {
+                service.packageManager.getPackageInfo(apkPackageName, PackageManager.GET_SIGNATURES)
+            } catch (e: PackageManager.NameNotFoundException) {
+                null
+            }
+
+            // Compare signatures if installed
+            if (installedInfo != null) {
+                val installedSignatures = installedInfo.signatures
+
+                // Handle null signatures safely
+                if (apkSignatures != null && installedSignatures != null) {
+                    val signaturesMatch = apkSignatures.size == installedSignatures.size &&
+                        apkSignatures.zip(installedSignatures).all { (a, b) ->
+                            a.toByteArray().contentEquals(b.toByteArray())
                         }
-                    } else {
-                        logcat(LogPriority.ERROR) { "Could not determine package name from ${entry.uri}" }
-                        InstallStep.Error
+
+                    if (!signaturesMatch) {
+                        logcat { "Signatures differ for $apkPackageName, uninstalling existing package" }
+                        val uninstallSuccess = uninstallPackage(apkPackageName)
+                        if (!uninstallSuccess) {
+                            throw Exception("Failed to uninstall $apkPackageName")
+                        }
+                    }
+                } else {
+                    // If either signatures array is null, treat as mismatch and uninstall
+                    logcat { "Signatures are null for $apkPackageName, uninstalling existing package" }
+                    val uninstallSuccess = uninstallPackage(apkPackageName)
+                    if (!uninstallSuccess) {
+                        throw Exception("Failed to uninstall $apkPackageName")
                     }
                 }
             }
-        } catch (e: Exception) {
-            logcat(LogPriority.ERROR, e) { "Failed to install extension ${entry.downloadId}" }
-            InstallStep.Error
-        }
-        withContext(Dispatchers.Main) {
-            continueQueue(result)
-        }
-    }
 
-    private suspend fun performInstall(entry: Entry): Boolean {
-        return withContext(Dispatchers.IO) {
-            try {
-                service.contentResolver.openAssetFileDescriptor(entry.uri, "r").use { fd ->
-                    shellInterface?.install(fd)
-                }
-                true
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Install attempt failed" }
-                false
+            // Clean up temp file before installation
+            tempFile.delete()
+            tempFile = null
+
+            // Proceed with installation using the original content URI
+            service.contentResolver.openAssetFileDescriptor(entry.uri, "r")?.use { fd ->
+                shellInterface?.install(fd) ?: throw Exception("Shizuku shell interface not available")
+            } ?: throw Exception("Failed to open APK file descriptor")
+
+            // Installation initiated successfully; queue will continue via broadcast receiver
+            // Do NOT call continueQueue here - it will be called by the broadcast receiver
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e) { "Failed during pre-install steps for ${entry.downloadId}" }
+            // Clean up temp file if it exists
+            tempFile?.delete()
+            // Only continue queue with error if we haven't initiated installation
+            // The broadcast receiver will handle success/error for initiated installations
+            withContext(Dispatchers.Main) {
+                continueQueue(InstallStep.Error)
             }
         }
     }
@@ -194,13 +225,6 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
                 false
             }
         }
-    }
-
-    private fun extractPackageName(uriString: String): String? {
-        return uriString.substringAfterLast('/')
-            .substringBeforeLast('-')
-            .replace('-', '.')
-            .takeIf { it.isNotBlank() }
     }
 
     // Don't cancel if entry is already started installing
@@ -238,3 +262,4 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
 
 private const val SHIZUKU_PERMISSION_REQUEST_CODE = 14045
 const val ACTION_INSTALL_RESULT = "${BuildConfig.APPLICATION_ID}.ACTION_INSTALL_RESULT"
+
