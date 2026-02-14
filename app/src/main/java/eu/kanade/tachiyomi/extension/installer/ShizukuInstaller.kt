@@ -15,12 +15,14 @@ import eu.kanade.domain.base.BasePreferences
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.extension.model.InstallStep
 import eu.kanade.tachiyomi.util.system.toast
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import logcat.LogPriority
 import mihon.app.shizuku.IShellInterface
 import mihon.app.shizuku.ShellInterface
@@ -29,6 +31,7 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import kotlin.time.Duration.Companion.seconds
 
 class ShizukuInstaller(private val service: Service) : Installer(service) {
 
@@ -37,6 +40,9 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
     private val reinstallOnFailure get() = preferences.shizukuReinstallOnFailure().get()
 
     private var shellInterface: IShellInterface? = null
+    
+    // Map to track installation results
+    private val pendingInstallations = mutableMapOf<String, CompletableDeferred<Boolean>>()
 
     private val shizukuArgs by lazy {
         Shizuku.UserServiceArgs(
@@ -66,11 +72,14 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
             val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
             val packageName = intent.getStringExtra(PackageInstaller.EXTRA_PACKAGE_NAME)
 
-            if (status == PackageInstaller.STATUS_SUCCESS) {
-                continueQueue(InstallStep.Installed)
-            } else {
-                logcat(LogPriority.ERROR) { "Failed to install extension $packageName: $message" }
-                continueQueue(InstallStep.Error)
+            if (packageName != null) {
+                val deferred = pendingInstallations.remove(packageName)
+                if (status == PackageInstaller.STATUS_SUCCESS) {
+                    deferred?.complete(true)
+                } else {
+                    logcat(LogPriority.ERROR) { "Failed to install extension $packageName: $message" }
+                    deferred?.complete(false)
+                }
             }
         }
     }
@@ -115,73 +124,66 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
 
     override fun processEntry(entry: Entry) {
         super.processEntry(entry)
-        if (reinstallOnFailure) {
-            // Use reinstall logic if enabled
-            scope.launch {
+        
+        scope.launch {
+            val result = if (reinstallOnFailure) {
                 installWithRetry(entry)
+            } else {
+                performInstallWithResult(entry)
             }
-        } else {
-            // Use normal installation
-            try {
-                service.contentResolver.openAssetFileDescriptor(entry.uri, "r").use { fd ->
-                    shellInterface?.install(fd)
-                }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to install extension ${entry.downloadId} ${entry.uri}" }
-                continueQueue(InstallStep.Error)
+            
+            withContext(Dispatchers.Main) {
+                continueQueue(if (result) InstallStep.Installed else InstallStep.Error)
             }
         }
     }
 
-    // New method for reinstall logic (only used when setting is enabled)
-    private suspend fun installWithRetry(entry: Entry) {
-        val result = try {
-            // First attempt: normal install
-            val firstAttempt = performInstall(entry)
-            if (firstAttempt) {
-                InstallStep.Installed
-            } else {
-                // Try reinstall strategy
-                withContext(Dispatchers.Main) {
-                    val packageName = extractPackageName(entry.uri.toString())
-                    if (packageName != null) {
-                        logcat { "Installation failed for $packageName, attempting uninstall and reinstall" }
-                        val uninstallSuccess = uninstallPackage(packageName)
-                        if (uninstallSuccess) {
-                            logcat { "Successfully uninstalled $packageName, retrying install" }
-                            val retrySuccess = performInstall(entry)
-                            if (retrySuccess) InstallStep.Installed else InstallStep.Error
-                        } else {
-                            logcat(LogPriority.ERROR) { "Failed to uninstall $packageName" }
-                            InstallStep.Error
-                        }
-                    } else {
-                        logcat(LogPriority.ERROR) { "Could not determine package name from ${entry.uri}" }
-                        InstallStep.Error
-                    }
-                }
+    private suspend fun performInstallWithResult(entry: Entry): Boolean {
+        val packageName = extractPackageName(entry.uri.toString()) ?: return false
+        
+        val deferred = CompletableDeferred<Boolean>()
+        pendingInstallations[packageName] = deferred
+
+        return try {
+            // Start the installation
+            service.contentResolver.openAssetFileDescriptor(entry.uri, "r").use { fd ->
+                shellInterface?.install(fd)
             }
+
+            // Wait for the result with timeout
+            withTimeoutOrNull(30.seconds) {
+                deferred.await()
+            } ?: false
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e) { "Failed to install extension ${entry.downloadId}" }
-            InstallStep.Error
-        }
-        withContext(Dispatchers.Main) {
-            continueQueue(result)
+            false
+        } finally {
+            pendingInstallations.remove(packageName)
         }
     }
 
-    private suspend fun performInstall(entry: Entry): Boolean {
-        return withContext(Dispatchers.IO) {
-            try {
-                service.contentResolver.openAssetFileDescriptor(entry.uri, "r").use { fd ->
-                    shellInterface?.install(fd)
+    private suspend fun installWithRetry(entry: Entry): Boolean {
+        // First attempt
+        var success = performInstallWithResult(entry)
+        
+        if (!success) {
+            // Try reinstall strategy
+            val packageName = extractPackageName(entry.uri.toString())
+            if (packageName != null) {
+                logcat { "Installation failed for $packageName, attempting uninstall and reinstall" }
+                
+                // Uninstall the package
+                val uninstallSuccess = uninstallPackage(packageName)
+                
+                if (uninstallSuccess) {
+                    logcat { "Successfully uninstalled $packageName, retrying install" }
+                    // Retry installation
+                    success = performInstallWithResult(entry)
                 }
-                true
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Install attempt failed" }
-                false
             }
         }
+        
+        return success
     }
 
     private suspend fun uninstallPackage(packageName: String): Boolean {
@@ -207,6 +209,10 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
     override fun cancelEntry(entry: Entry): Boolean = getActiveEntry() != entry
 
     override fun onDestroy() {
+        // Cancel all pending installations
+        pendingInstallations.values.forEach { it.complete(false) }
+        pendingInstallations.clear()
+        
         Shizuku.removeBinderDeadListener(shizukuDeadListener)
         Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener)
         if (Shizuku.pingBinder()) {
