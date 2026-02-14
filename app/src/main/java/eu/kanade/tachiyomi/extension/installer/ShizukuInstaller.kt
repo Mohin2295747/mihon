@@ -9,6 +9,7 @@ import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
+import android.content.pm.Signature
 import android.os.IBinder
 import androidx.core.content.ContextCompat
 import eu.kanade.domain.base.BasePreferences
@@ -166,13 +167,24 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
             // Compare signatures if installed
             if (installedInfo != null) {
                 val installedSignatures = installedInfo.signatures
-                val signaturesMatch = apkSignatures.size == installedSignatures.size &&
-                    apkSignatures.zip(installedSignatures).all { (a, b) ->
-                        a.toByteArray().contentEquals(b.toByteArray())
-                    }
+                
+                // Handle null signatures safely
+                if (apkSignatures != null && installedSignatures != null) {
+                    val signaturesMatch = apkSignatures.size == installedSignatures.size &&
+                        apkSignatures.zip(installedSignatures).all { (a, b) ->
+                            a.toByteArray().contentEquals(b.toByteArray())
+                        }
 
-                if (!signaturesMatch) {
-                    logcat { "Signatures differ for $apkPackageName, uninstalling existing package" }
+                    if (!signaturesMatch) {
+                        logcat { "Signatures differ for $apkPackageName, uninstalling existing package" }
+                        val uninstallSuccess = uninstallPackage(apkPackageName)
+                        if (!uninstallSuccess) {
+                            throw Exception("Failed to uninstall $apkPackageName")
+                        }
+                    }
+                } else {
+                    // If either signatures array is null, treat as mismatch and uninstall
+                    logcat { "Signatures are null for $apkPackageName, uninstalling existing package" }
                     val uninstallSuccess = uninstallPackage(apkPackageName)
                     if (!uninstallSuccess) {
                         throw Exception("Failed to uninstall $apkPackageName")
