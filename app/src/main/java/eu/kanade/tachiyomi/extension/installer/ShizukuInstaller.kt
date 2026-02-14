@@ -148,7 +148,7 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
             // Extract package info and signatures from the APK
             val apkInfo = service.packageManager.getPackageArchiveInfo(
                 tempFile.absolutePath,
-                PackageManager.GET_SIGNATURES
+                PackageManager.GET_SIGNATURES,
             )
             if (apkInfo == null) {
                 throw Exception("Failed to read APK package info")
