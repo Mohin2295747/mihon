@@ -41,8 +41,10 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
 
     private var shellInterface: IShellInterface? = null
 
-    // Map to track installation results
+    // Map to track installation results - now stores more info
     private val pendingInstallations = mutableMapOf<String, CompletableDeferred<Boolean>>()
+    // Track which entries are being processed for signature mismatch
+    private val signatureMismatchEntries = mutableSetOf<Entry>()
 
     private val shizukuArgs by lazy {
         Shizuku.UserServiceArgs(
@@ -78,7 +80,18 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
                     deferred?.complete(true)
                 } else {
                     logcat(LogPriority.ERROR) { "Failed to install extension $packageName: $message" }
-                    deferred?.complete(false)
+                    
+                    // Check if this is a signature mismatch error
+                    if (message != null && 
+                        (message.contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE") || 
+                         message.contains("Signature mismatch") ||
+                         message.contains("signatures do not match"))) {
+                        
+                        // Don't complete yet - we'll handle it in the retry logic
+                        deferred?.complete(false)
+                    } else {
+                        deferred?.complete(false)
+                    }
                 }
             }
         }
@@ -166,19 +179,26 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
         // First attempt
         var success = performInstallWithResult(entry)
 
-        if (!success) {
-            // Try reinstall strategy
+        if (!success && reinstallOnFailure) {
+            // Try to uninstall and reinstall
             val packageName = extractPackageName(entry.uri.toString())
             if (packageName != null) {
                 logcat { "Installation failed for $packageName, attempting uninstall and reinstall" }
 
+                // First, try to get the actual package name if needed
+                val actualPackageName = getActualPackageName(entry, packageName)
+
                 // Uninstall the package
-                val uninstallSuccess = uninstallPackage(packageName)
+                val uninstallSuccess = uninstallPackage(actualPackageName)
 
                 if (uninstallSuccess) {
-                    logcat { "Successfully uninstalled $packageName, retrying install" }
+                    logcat { "Successfully uninstalled $actualPackageName, retrying install" }
+                    // Small delay to ensure uninstall completes
+                    kotlinx.coroutines.delay(500)
                     // Retry installation
                     success = performInstallWithResult(entry)
+                } else {
+                    logcat { "Failed to uninstall $actualPackageName" }
                 }
             }
         }
@@ -186,11 +206,41 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
         return success
     }
 
+    private suspend fun getActualPackageName(entry: Entry, fallback: String): String {
+        return withContext(Dispatchers.IO) {
+            try {
+                // Try to get the installed package name using pm list packages
+                val packagePrefix = fallback.substringBeforeLast('.')
+                val result = shellInterface?.runCommand("pm list packages | grep $packagePrefix")
+                
+                if (!result.isNullOrEmpty()) {
+                    // Extract package name from "package:com.example.name"
+                    result.lines()
+                        .firstOrNull { it.contains(packagePrefix) }
+                        ?.substringAfter("package:")
+                        ?.trim() ?: fallback
+                } else {
+                    fallback
+                }
+            } catch (e: Exception) {
+                fallback
+            }
+        }
+    }
+
     private suspend fun uninstallPackage(packageName: String): Boolean {
         return withContext(Dispatchers.IO) {
             try {
+                logcat { "Running: pm uninstall $packageName" }
                 val result = shellInterface?.runCommand("pm uninstall $packageName")
-                result?.contains("Success") == true
+                logcat { "Uninstall result: $result" }
+                
+                // Check for success in various ways
+                result?.let {
+                    it.contains("Success") || 
+                    it.contains("success") || 
+                    (it.contains("Failure") && it.contains("not installed")) // Already uninstalled
+                } == true
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR, e) { "Failed to uninstall $packageName" }
                 false
@@ -199,10 +249,20 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
     }
 
     private fun extractPackageName(uriString: String): String? {
-        return uriString.substringAfterLast('/')
-            .substringBeforeLast('-')
-            .replace('-', '.')
-            .takeIf { it.isNotBlank() }
+        // Handle content:// URIs
+        val filename = uriString.substringAfterLast('/')
+        
+        // Remove .apk extension
+        val nameWithoutExt = filename.removeSuffix(".apk")
+        
+        // Extract package name (format: something-com.example.name-version)
+        return nameWithoutExt
+            .substringAfterLast('-', "") // Get everything after last hyphen
+            .takeIf { it.isNotEmpty() }
+            ?: nameWithoutExt
+                .substringAfter('-', nameWithoutExt) // Fallback: get after first hyphen
+                .substringBeforeLast('-') // Remove version
+                .replace('-', '.')
     }
 
     // Don't cancel if entry is already started installing
@@ -212,6 +272,7 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
         // Cancel all pending installations
         pendingInstallations.values.forEach { it.complete(false) }
         pendingInstallations.clear()
+        signatureMismatchEntries.clear()
 
         Shizuku.removeBinderDeadListener(shizukuDeadListener)
         Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener)
