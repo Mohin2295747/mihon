@@ -394,6 +394,7 @@ object SettingsAdvancedScreen : SearchableSettings {
         val extensionInstallerPref = basePreferences.extensionInstaller()
         var shizukuMissing by rememberSaveable { mutableStateOf(false) }
         val trustExtension = remember { Injekt.get<TrustExtension>() }
+        val currentInstaller by extensionInstallerPref.collectAsState()
 
         if (shizukuMissing) {
             val dismiss = { shizukuMissing = false }
