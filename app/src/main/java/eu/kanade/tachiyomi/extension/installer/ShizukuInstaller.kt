@@ -155,6 +155,7 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
             if (installedInfo != null) {
                 val installedSignatures = installedInfo.signatures
 
+                // Only uninstall if both signatures are present and don't match
                 if (apkSignatures != null && installedSignatures != null) {
                     val signaturesMatch = apkSignatures.size == installedSignatures.size &&
                         apkSignatures.zip(installedSignatures).all { (a, b) ->
@@ -168,9 +169,8 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
                         }
                     }
                 } else {
-                    logcat { "Signatures are null for $apkPackageName, uninstalling existing package" }
-                    withContext(Dispatchers.IO) {
-                        shellInterface?.uninstall(apkPackageName)
+                    logcat(LogPriority.WARN) { 
+                        "Cannot verify signatures for $apkPackageName (new sig: ${apkSignatures != null}, installed sig: ${installedSignatures != null})"
                     }
                 }
             }
