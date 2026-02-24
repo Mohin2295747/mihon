@@ -41,9 +41,10 @@ package mihon.app.shizuku
 
 import android.annotation.SuppressLint
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentSender
+import android.content.IntentFilter
 import android.content.pm.PackageInstaller
 import android.content.res.AssetFileDescriptor
 import android.os.Build
@@ -54,6 +55,9 @@ import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.extension.installer.ACTION_INSTALL_RESULT
 import rikka.shizuku.SystemServiceHelper
 import java.io.OutputStream
+import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.system.exitProcess
 
 class ShellInterface : IShellInterface.Stub() {
@@ -66,7 +70,7 @@ class ShellInterface : IShellInterface.Stub() {
 
     @SuppressLint("PrivateApi")
     override fun install(apk: AssetFileDescriptor) {
-        val pmInterface = Class.forName($$"android.content.pm.IPackageManager$Stub")
+        val pmInterface = Class.forName("android.content.pm.IPackageManager\$Stub")
             .getMethod("asInterface", IBinder::class.java)
             .invoke(null, SystemServiceHelper.getSystemService("package"))
 
@@ -127,7 +131,7 @@ class ShellInterface : IShellInterface.Stub() {
                 if (revocable) {
                     ParcelFileDescriptor.AutoCloseOutputStream(fd)
                 } else {
-                    Class.forName($$"android.os.FileBridge$FileBridgeOutputStream")
+                    Class.forName("android.os.FileBridge\$FileBridgeOutputStream")
                         .getConstructor(ParcelFileDescriptor::class.java)
                         .newInstance(fd) as OutputStream
                 }
@@ -152,19 +156,33 @@ class ShellInterface : IShellInterface.Stub() {
         }
     }
 
-    override fun runCommand(command: String): String? {
-        return try {
-            val process = Runtime.getRuntime().exec(command)
-            val output = process.inputStream.bufferedReader().readText()
-            val error = process.errorStream.bufferedReader().readText()
-            if (error.isNotEmpty()) {
-                // Log error but still return output if there is any
-                android.util.Log.e("Shizuku", "Command error: $error")
+    override fun uninstall(packageName: String) {
+        val action = "mihon.app.shizuku.UNINSTALL_RESULT_${UUID.randomUUID()}"
+        val intent = Intent(action).setPackage("com.android.shell")
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            0,
+            intent,
+            PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+        val latch = CountDownLatch(1)
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                latch.countDown()
             }
-            output.ifEmpty { null }
+        }
+
+        context.registerReceiver(receiver, IntentFilter(action), Context.RECEIVER_EXPORTED)
+
+        try {
+            val packageInstaller = context.packageManager.packageInstaller
+            packageInstaller.uninstall(packageName, pendingIntent.intentSender)
+            latch.await(30, TimeUnit.SECONDS)
         } catch (e: Exception) {
-            android.util.Log.e("Shizuku", "Failed to run command: $command", e)
-            null
+            android.util.Log.e("Shizuku", "Uninstall failed for $packageName", e)
+        } finally {
+            context.unregisterReceiver(receiver)
         }
     }
 
