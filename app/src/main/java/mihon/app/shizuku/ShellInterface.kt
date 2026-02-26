@@ -190,7 +190,7 @@ class ShellInterface : IShellInterface.Stub() {
                 String::class.java,
                 Int::class.javaPrimitiveType,
                 IntentSender::class.java,
-                Int::class.javaPrimitiveType
+                Int::class.javaPrimitiveType,
             )
 
             uninstallMethod.invoke(
@@ -199,7 +199,7 @@ class ShellInterface : IShellInterface.Stub() {
                 context.packageName,
                 0,
                 pendingIntent.intentSender,
-                userId
+                userId,
             )
 
             if (!latch.await(30, TimeUnit.SECONDS)) {
@@ -245,3 +245,4 @@ class ShellInterface : IShellInterface.Stub() {
 // Constant hidden from the SDK
 // https://cs.android.com/android/platform/superproject/main/+/512046e84bcc51cc241bc6599f83ab345e93ab12:frameworks/base/core/java/android/content/pm/PackageManager.java;l=1682-1689
 private const val REPLACE_EXISTING_INSTALL_FLAG = 0x00000002
+    
