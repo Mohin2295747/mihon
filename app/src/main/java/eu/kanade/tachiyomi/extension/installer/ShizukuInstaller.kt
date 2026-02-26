@@ -68,6 +68,13 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
             val packageName = intent.getStringExtra(PackageInstaller.EXTRA_PACKAGE_NAME)
 
             if (status == PackageInstaller.STATUS_SUCCESS) {
+                getActiveEntry()?.uri?.let { uri ->
+                    try {
+                        service.contentResolver.delete(uri, null, null)
+                    } catch (e: Exception) {
+                        logcat(LogPriority.ERROR, e) { "Failed to delete source APK for $packageName" }
+                    }
+                }
                 continueQueue(InstallStep.Installed)
             } else {
                 logcat(LogPriority.ERROR) { "Failed to install extension $packageName: $message" }
@@ -155,6 +162,7 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
             if (installedInfo != null) {
                 val installedSignatures = installedInfo.signatures
 
+                // Only uninstall if both signatures are present and don't match
                 if (apkSignatures != null && installedSignatures != null) {
                     val signaturesMatch = apkSignatures.size == installedSignatures.size &&
                         apkSignatures.zip(installedSignatures).all { (a, b) ->
@@ -168,9 +176,8 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
                         }
                     }
                 } else {
-                    logcat { "Signatures are null for $apkPackageName, uninstalling existing package" }
-                    withContext(Dispatchers.IO) {
-                        shellInterface?.uninstall(apkPackageName)
+                    logcat(LogPriority.WARN) { 
+                        "Cannot verify signatures for $apkPackageName (new sig: ${apkSignatures != null}, installed sig: ${installedSignatures != null})"
                     }
                 }
             }
