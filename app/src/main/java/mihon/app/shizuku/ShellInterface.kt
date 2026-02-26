@@ -176,36 +176,11 @@ class ShellInterface : IShellInterface.Stub() {
         context.registerReceiver(receiver, IntentFilter(action), Context.RECEIVER_EXPORTED)
 
         try {
-            val pmInterface = Class.forName("android.content.pm.IPackageManager\$Stub")
-                .getMethod("asInterface", IBinder::class.java)
-                .invoke(null, SystemServiceHelper.getSystemService("package"))
-
-            val versionedPackageClass = Class.forName("android.content.pm.VersionedPackage")
-            val versionedPackage = versionedPackageClass.getConstructor(String::class.java)
-                .newInstance(packageName)
-
-            val uninstallMethod = pmInterface::class.java.getMethod(
-                "uninstall",
-                versionedPackageClass,
-                String::class.java,
-                Int::class.javaPrimitiveType,
-                IntentSender::class.java,
-                Int::class.javaPrimitiveType,
-            )
-
-            uninstallMethod.invoke(
-                pmInterface,
-                versionedPackage,
-                context.packageName,
-                0,
-                pendingIntent.intentSender,
-                userId,
-            )
-
-            if (!latch.await(30, TimeUnit.SECONDS)) {
-                android.util.Log.e("Shizuku", "Uninstall timed out for $packageName after 30s")
-            }
-        } catch (e: Exception) {
+            val packageInstaller = context.packageManager.packageInstaller
+            packageInstaller.uninstall(packageName, pendingIntent.intentSender)
+            latch.await(30, TimeUnit.SECONDS)
+            } catch (e: Exception) {
+            android.util.Log.e("Shizuku", "Uninstall failed for $packageName", e)
             android.util.Log.e("Shizuku", "Silent uninstall failed for $packageName", e)
         } finally {
             context.unregisterReceiver(receiver)
