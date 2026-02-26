@@ -179,7 +179,7 @@ class ShellInterface : IShellInterface.Stub() {
             val packageInstaller = context.packageManager.packageInstaller
             packageInstaller.uninstall(packageName, pendingIntent.intentSender)
             latch.await(30, TimeUnit.SECONDS)
-            } catch (e: Exception) {
+        } catch (e: Exception) {
             android.util.Log.e("Shizuku", "Uninstall failed for $packageName", e)
             android.util.Log.e("Shizuku", "Silent uninstall failed for $packageName", e)
         } finally {
