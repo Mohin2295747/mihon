@@ -68,6 +68,13 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
             val packageName = intent.getStringExtra(PackageInstaller.EXTRA_PACKAGE_NAME)
 
             if (status == PackageInstaller.STATUS_SUCCESS) {
+                getActiveEntry()?.uri?.let { uri ->
+                    try {
+                        service.contentResolver.delete(uri, null, null)
+                    } catch (e: Exception) {
+                        logcat(LogPriority.ERROR, e) { "Failed to delete source APK for $packageName" }
+                    }
+                }
                 continueQueue(InstallStep.Installed)
             } else {
                 logcat(LogPriority.ERROR) { "Failed to install extension $packageName: $message" }
