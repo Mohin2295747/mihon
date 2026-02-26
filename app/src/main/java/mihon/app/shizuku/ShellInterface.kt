@@ -181,7 +181,6 @@ class ShellInterface : IShellInterface.Stub() {
             latch.await(30, TimeUnit.SECONDS)
         } catch (e: Exception) {
             android.util.Log.e("Shizuku", "Uninstall failed for $packageName", e)
-            android.util.Log.e("Shizuku", "Silent uninstall failed for $packageName", e)
         } finally {
             context.unregisterReceiver(receiver)
         }
