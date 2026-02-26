@@ -245,4 +245,3 @@ class ShellInterface : IShellInterface.Stub() {
 // Constant hidden from the SDK
 // https://cs.android.com/android/platform/superproject/main/+/512046e84bcc51cc241bc6599f83ab345e93ab12:frameworks/base/core/java/android/content/pm/PackageManager.java;l=1682-1689
 private const val REPLACE_EXISTING_INSTALL_FLAG = 0x00000002
-    
