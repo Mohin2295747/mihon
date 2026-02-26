@@ -176,7 +176,7 @@ class ShizukuInstaller(private val service: Service) : Installer(service) {
                         }
                     }
                 } else {
-                    logcat(LogPriority.WARN) { 
+                    logcat(LogPriority.WARN) {
                         "Cannot verify signatures for $apkPackageName (new sig: ${apkSignatures != null}, installed sig: ${installedSignatures != null})"
                     }
                 }
