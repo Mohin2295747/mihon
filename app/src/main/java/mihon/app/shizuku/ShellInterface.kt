@@ -197,7 +197,7 @@ class ShellInterface : IShellInterface.Stub() {
         val systemContext = activityThread.getMethod("getSystemContext").invoke(systemMain) as Context
 
         val shellUserHandle = UserHandle::class.java
-            .getConstructor(Int::class.java
+            .getConstructor(Int::class.java)
             .newInstance(userId)
 
         val shellContext = systemContext::class.java.getMethod(
