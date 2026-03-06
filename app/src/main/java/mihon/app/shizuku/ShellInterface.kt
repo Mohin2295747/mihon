@@ -149,7 +149,7 @@ class ShellInterface : IShellInterface.Stub() {
         )
 
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.O) {
-            session::class.java.getMethod("commit", IntentSender::class.java, Boolean::class.javaPrimitiveType)
+            session::class.java.getMethod("commit", IntentSender::class.java, Boolean::class.java)
                 .invoke(session, statusIntent.intentSender, false)
         } else {
             session::class.java.getMethod("commit", IntentSender::class.java)
@@ -197,13 +197,13 @@ class ShellInterface : IShellInterface.Stub() {
         val systemContext = activityThread.getMethod("getSystemContext").invoke(systemMain) as Context
 
         val shellUserHandle = UserHandle::class.java
-            .getConstructor(Int::class.javaPrimitiveType)
+            .getConstructor(Int::class.java
             .newInstance(userId)
 
         val shellContext = systemContext::class.java.getMethod(
             "createPackageContextAsUser",
             String::class.java,
-            Int::class.javaPrimitiveType,
+            Int::class.java,
             UserHandle::class.java,
         ).invoke(
             systemContext,
