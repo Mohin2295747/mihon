@@ -101,32 +101,32 @@ class ShellInterface : IShellInterface.Stub() {
                 PackageInstaller.SessionParams::class.java,
                 String::class.java,
                 String::class.java,
-                Int::class.javaPrimitiveType,
+                Int::class.java,
             ).invoke(packageInstaller, params, packageName, packageName, userId) as Int
         } else {
             packageInstaller::class.java.getMethod(
                 "createSession",
                 PackageInstaller.SessionParams::class.java,
                 String::class.java,
-                Int::class.javaPrimitiveType,
+                Int::class.java,
             ).invoke(packageInstaller, params, packageName, userId) as Int
         }
 
         val session = packageInstaller::class.java
-            .getMethod("openSession", Int::class.javaPrimitiveType)
+            .getMethod("openSession", Int::class.java)
             .invoke(packageInstaller, sessionId)
 
         session::class.java.getMethod(
             "openWrite",
             String::class.java,
-            Long::class.javaPrimitiveType,
-            Long::class.javaPrimitiveType,
+            Long::class.java,
+            Long::class.java,
         )
             .invoke(session, "extension", 0L, apk.length)
             .let { it as ParcelFileDescriptor }
             .let { fd ->
                 val revocable = Class.forName("android.os.SystemProperties")
-                    .getMethod("getBoolean", String::class.java, Boolean::class.javaPrimitiveType)
+                    .getMethod("getBoolean", String::class.java, Boolean::class.java)
                     .invoke(null, "fw.revocable_fd", false) as Boolean
 
                 if (revocable) {
