@@ -75,7 +75,6 @@ object SettingsLibraryScreen : SearchableSettings {
         val scope = rememberCoroutineScope()
         val userCategoriesCount = allCategories.filterNot(Category::isSystemCategory).size
 
-        // For default category
         val ids = listOf(libraryPreferences.defaultCategory().defaultValue()) +
             allCategories.fastMap { it.id.toInt() }
         val labels = listOf(stringResource(MR.strings.default_category_summary)) +
@@ -132,14 +131,10 @@ object SettingsLibraryScreen : SearchableSettings {
         if (autoUpdateInterval == 12){
             displayTime = autoUpdateTime.split(" ")[0] + " am/pm"
         }
-        // Convert time to 24/12hr format based on system settings
         else if (DateFormat.is24HourFormat(context))
         {
-            // Convert from string to LocalTime
             val format12 = DateTimeFormatter.ofPattern("h:m a")
             val time = LocalTime.parse(displayTime, format12)
-
-            //Convert to 24hr format
             val format24 = DateTimeFormatter.ofPattern("k:mm")
             displayTime = format24.format(time)
         }
@@ -204,7 +199,6 @@ object SettingsLibraryScreen : SearchableSettings {
                     subtitle = stringResource(MR.strings.restrictions),
                     enabled = autoUpdateInterval > 0,
                     onValueChanged = {
-                        // Post to event looper to allow the preference to be updated.
                         ContextCompat.getMainExecutor(context).execute { LibraryUpdateJob.setupTask(context) }
                         true
                     },

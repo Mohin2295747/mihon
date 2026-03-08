@@ -20,9 +20,6 @@ sealed class Preference {
         abstract val icon: ImageVector?
         abstract val onValueChanged: suspend (value: T) -> R
 
-        /**
-         * A basic [PreferenceItem] that only displays texts.
-         */
         data class TextPreference(
             override val title: String,
             override val subtitle: String? = null,
@@ -33,9 +30,6 @@ sealed class Preference {
             override val onValueChanged: suspend (value: String) -> Unit = {}
         }
 
-        /**
-         * A [PreferenceItem] that provides a two-state toggleable option.
-         */
         data class SwitchPreference(
             val preference: PreferenceData<Boolean>,
             override val title: String,
@@ -46,9 +40,6 @@ sealed class Preference {
             override val icon: ImageVector? = null
         }
 
-        /**
-         * A [PreferenceItem] that provides a slider to select an integer number.
-         */
         data class SliderPreference(
             val value: Int,
             override val title: String,
@@ -62,9 +53,6 @@ sealed class Preference {
             override val icon: ImageVector? = null
         }
 
-        /**
-         * A [PreferenceItem] that displays a list of entries as a dialog.
-         */
         @Suppress("UNCHECKED_CAST")
         data class ListPreference<T>(
             val preference: PreferenceData<T>,
@@ -85,9 +73,6 @@ sealed class Preference {
                 subtitleProvider(value as T, entries as ImmutableMap<T, String>)
         }
 
-        /**
-         * [ListPreference] but with no connection to a [PreferenceData]
-         */
         data class BasicListPreference(
             val value: String,
             val entries: ImmutableMap<String, String>,
@@ -100,10 +85,6 @@ sealed class Preference {
             override val onValueChanged: suspend (value: String) -> Unit = {},
         ) : PreferenceItem<String, Unit>()
 
-        /**
-         * A [PreferenceItem] that displays a list of entries as a dialog.
-         * Multiple entries can be selected at the same time.
-         */
         data class MultiSelectListPreference(
             val preference: PreferenceData<Set<String>>,
             val entries: ImmutableMap<String, String>,
@@ -124,9 +105,6 @@ sealed class Preference {
             override val onValueChanged: suspend (value: Set<String>) -> Boolean = { true },
         ) : PreferenceItem<Set<String>, Boolean>()
 
-        /**
-         * A [PreferenceItem] that shows a EditText in the dialog.
-         */
         data class EditTextPreference(
             val preference: PreferenceData<String>,
             override val title: String,
@@ -137,9 +115,6 @@ sealed class Preference {
             override val icon: ImageVector? = null
         }
 
-        /**
-         * A [PreferenceItem] for individual tracker.
-         */
         data class TrackerPreference(
             val tracker: Tracker,
             val login: () -> Unit,
@@ -167,7 +142,7 @@ sealed class Preference {
             override val subtitle: String? = "%s",
             override val enabled: Boolean = true,
             override val onValueChanged: suspend (value: String) -> Boolean = { true },
-        ) : PreferenceItem<String>() {
+        ) : PreferenceItem<String, Boolean>() {
             override val icon: ImageVector? = null
         }
 
@@ -185,7 +160,6 @@ sealed class Preference {
     data class PreferenceGroup(
         override val title: String,
         override val enabled: Boolean = true,
-
         val preferenceItems: ImmutableList<PreferenceItem<out Any, out Any>>,
     ) : Preference()
 }
