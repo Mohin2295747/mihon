@@ -47,11 +47,15 @@ class GoogleTranslator(
             val client = client1
             val calculateToken = calculateToken(text)
             val encode: String = URLEncoder.encode(text, "utf-8")
-            return "https://translate.google.com/translate_a/single?client=$client&sl=auto&tl=$lang&dt=at&dt=bd&dt=ex&dt=ld&dt=md&dt=qca&dt=rw&dt=rm&dt=ss&dt=t&otf=1&ssel=0&tsel=0&kc=1&tk=$calculateToken&q=$encode"
+            return "https://translate.google.com/translate_a/single?" +
+                "client=$client&sl=auto&tl=$lang&dt=at&dt=bd&dt=ex&dt=ld&dt=md&dt=qca&" +
+                "dt=rw&dt=rm&dt=ss&dt=t&otf=1&ssel=0&tsel=0&kc=1&tk=$calculateToken&q=$encode"
         } catch (unused: UnsupportedEncodingException) {
             val client2 = client1
             val calculateToken2 = calculateToken(text)
-            return "https://translate.google.com/translate_a/single?client=$client2&sl=auto&tl=$lang&dt=at&dt=bd&dt=ex&dt=ld&dt=md&dt=qca&dt=rw&dt=rm&dt=ss&dt=t&otf=1&ssel=0&tsel=0&kc=1&tk=$calculateToken2&q=$text"
+            return "https://translate.google.com/translate_a/single?" +
+                "client=$client2&sl=auto&tl=$lang&dt=at&dt=bd&dt=ex&dt=ld&dt=md&dt=qca&" +
+                "dt=rw&dt=rm&dt=ss&dt=t&otf=1&ssel=0&tsel=0&kc=1&tk=$calculateToken2&q=$text"
         }
     }
 
@@ -70,7 +74,8 @@ class GoogleTranslator(
                 charCodeAt in 55296..57343 && i + 1 < str.length -> {
                     val nextChar = str.codePointAt(i + 1)
                     if (nextChar in 56320..57343) {
-                        val codePoint = ((charCodeAt and 1023) shl 10) + (nextChar and 1023) + 65536
+                        val codePoint = ((charCodeAt and 1023) shl 10) +
+                            (nextChar and 1023) + 65536
                         list.add((codePoint shr 18) or 240)
                         list.add(((codePoint shr 12) and 63) or 128)
                         list.add(((codePoint shr 6) and 63) or 128)
@@ -103,16 +108,26 @@ class GoogleTranslator(
         var result = j
         var i = 0
         while (i < str.length - 2) {
-            val shift = if (str[i + 2] in 'a'..'z') str[i + 2].code - 'W'.code else str[i + 2].digitToInt()
-            val shiftValue = if (str[i + 1] == '+') result ushr shift else result shl shift
-            result = if (str[i] == '+') (result + shiftValue) and 4294967295L else result xor shiftValue
+            val shift = if (str[i + 2] in 'a'..'z') {
+                str[i + 2].code - 'W'.code
+            } else {
+                str[i + 2].digitToInt()
+            }
+            val shiftValue = if (str[i + 1] == '+') {
+                result ushr shift
+            } else {
+                result shl shift
+            }
+            result = if (str[i] == '+') {
+                (result + shiftValue) and 4294967295L
+            } else {
+                result xor shiftValue
+            }
             i += 3
         }
         return result
     }
 
-
     override fun close() {
     }
-
 }
