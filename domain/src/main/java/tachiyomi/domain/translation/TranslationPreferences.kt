@@ -1,10 +1,3 @@
-// TachiyomiAT
-private const val TRANSLATION_PATH = "translations"
- 19 changes: 19 additions & 0 deletions19  
-domain/src/main/java/tachiyomi/domain/translation/TranslationPreferences.kt
-Copied!
-Original file line number	Diff line number	Diff line change
-@@ -0,0 +1,19 @@
 package tachiyomi.domain.translation
 
 import tachiyomi.core.common.preference.PreferenceStore
