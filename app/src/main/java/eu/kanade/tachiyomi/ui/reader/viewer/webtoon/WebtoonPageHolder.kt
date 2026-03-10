@@ -17,13 +17,18 @@ import eu.kanade.presentation.util.formattedMessage
 import eu.kanade.tachiyomi.databinding.ReaderErrorBinding
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import eu.kanade.tachiyomi.util.system.dpToPx
+import eu.kanade.translation.data.TranslationFont
+import eu.kanade.translation.presentation.WebtoonTranslationsView
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import logcat.LogPriority
@@ -35,7 +40,10 @@ import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.ImageUtil
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.translation.TranslationPreferences
 import tachiyomi.i18n.MR
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 /**
  * Holder of the webtoon reader for a single page of a chapter.
@@ -46,8 +54,14 @@ import tachiyomi.i18n.MR
  */
 class WebtoonPageHolder(
     private val frame: ReaderPageImageView,
-    viewer: WebtoonViewer,
+    translationPreferences: TranslationPreferences = Injekt.get(),
+    private val font: TranslationFont = TranslationFont.fromPref(translationPreferences.translationFont()),
+    readerPreferences: ReaderPreferences = Injekt.get(),
 ) : WebtoonBaseHolder(frame, viewer) {
+
+    // TachiyomiAT
+    private var showTranslations = true
+    private var translationsView: WebtoonTranslationsView? = null
 
     /**
      * Loading progress bar to indicate the current progress.
@@ -89,6 +103,17 @@ class WebtoonPageHolder(
         frame.onImageLoaded = { onImageDecoded() }
         frame.onImageLoadError = { error -> setError(error) }
         frame.onScaleChanged = { viewer.activity.hideMenu() }
+        
+        // TachiyomiAT
+        showTranslations = readerPreferences.showTranslations().get()
+        readerPreferences.showTranslations().changes().onEach {
+            showTranslations = it
+            if (it) {
+                translationsView?.show()
+            } else {
+                translationsView?.hide()
+            }
+        }.launchIn(scope)
     }
 
     /**
@@ -150,7 +175,12 @@ class WebtoonPageHolder(
                             progressIndicator.setProgress(value)
                         }
                     }
-                    Page.State.Ready -> setImage()
+                    
+                    Page.State.READY -> {
+                        setImage()
+                        // TachiyomiAT
+                        addTranslationsView()
+                    }
                     is Page.State.Error -> setError(state.error)
                 }
             }
@@ -289,6 +319,7 @@ class WebtoonPageHolder(
     private fun setError(error: Throwable?) {
         progressContainer.isVisible = false
         initErrorLayout(error)
+        translationsView?.hide()
     }
 
     /**
@@ -297,6 +328,16 @@ class WebtoonPageHolder(
     private fun onImageDecoded() {
         progressContainer.isVisible = false
         removeErrorLayout()
+        translationsView?.show()
+    }
+
+    // TachiyomiAT
+    private fun addTranslationsView() {
+        if (page?.translation == null) return
+        frame.removeView(translationsView)
+        translationsView = WebtoonTranslationsView(context, translation = page!!.translation!!, font = font)
+        if (!showTranslations) translationsView?.hide()
+        frame.addView(translationsView, MATCH_PARENT, MATCH_PARENT)
     }
 
     /**

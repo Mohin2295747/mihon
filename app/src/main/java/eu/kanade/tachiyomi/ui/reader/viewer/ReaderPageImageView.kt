@@ -64,13 +64,14 @@ open class ReaderPageImageView @JvmOverloads constructor(
         Injekt.get<BasePreferences>().alwaysDecodeLongStripWithSSIV().get()
     }
 
-    private var pageView: View? = null
+    var pageView: View? = null
 
     private var config: Config? = null
 
     var onImageLoaded: (() -> Unit)? = null
     var onImageLoadError: ((Throwable?) -> Unit)? = null
     var onScaleChanged: ((newScale: Float) -> Unit)? = null
+    var onCenterChanged: ((newCenter: PointF) -> Unit)? = null
     var onViewClicked: (() -> Unit)? = null
 
     /**
@@ -92,6 +93,11 @@ open class ReaderPageImageView @JvmOverloads constructor(
     @CallSuper
     open fun onScaleChanged(newScale: Float) {
         onScaleChanged?.invoke(newScale)
+    }
+    
+    @CallSuper
+    open fun onCenterChanged(newCenter: PointF?) {
+        if (newCenter != null) onCenterChanged?.invoke(newCenter)
     }
 
     @CallSuper
@@ -251,7 +257,8 @@ open class ReaderPageImageView @JvmOverloads constructor(
                     }
 
                     override fun onCenterChanged(newCenter: PointF?, origin: Int) {
-                        // Not used
+                        // TachiyomiAT
+                        this@ReaderPageImageView.onCenterChanged(newCenter)
                     }
                 },
             )
