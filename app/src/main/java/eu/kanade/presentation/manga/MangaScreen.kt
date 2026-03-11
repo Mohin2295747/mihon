@@ -753,7 +753,6 @@ private fun LazyListScope.sharedChapterItems(
     chapterSwipeEndAction: LibraryPreferences.ChapterSwipeAction,
     onChapterClicked: (Chapter) -> Unit,
     onDownloadChapter: ((List<ChapterList.Item>, ChapterDownloadAction) -> Unit)?,
-    // TachiyomiAT
     onTranslationChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
     onChapterSelected: (ChapterList.Item, Boolean, Boolean, Boolean) -> Unit,
     onChapterSwipe: (ChapterList.Item, LibraryPreferences.ChapterSwipeAction) -> Unit,
@@ -799,11 +798,11 @@ private fun LazyListScope.sharedChapterItems(
                     selected = item.selected,
                     downloadIndicatorEnabled = !isAnyChapterSelected && !manga.isLocal(),
                     downloadStateProvider = { item.downloadState },
-                    // TachiyomiAT
                     translationStateProvider = { item.translationState },
                     downloadProgressProvider = { item.downloadProgress },
                     chapterSwipeStartAction = chapterSwipeStartAction,
                     chapterSwipeEndAction = chapterSwipeEndAction,
+                    isLocalManga = manga.isLocal(),
                     onLongClick = {
                         onChapterSelected(item, !item.selected, true, true)
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -816,7 +815,6 @@ private fun LazyListScope.sharedChapterItems(
                             onChapterClicked = onChapterClicked,
                         )
                     },
-                    // TachiyomiAT
                     onTranslationClick = if (onTranslationChapter != null) {
                         { onTranslationChapter(item, it) }
                     } else {
