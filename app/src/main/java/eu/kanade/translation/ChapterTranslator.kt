@@ -203,8 +203,8 @@ class ChapterTranslator(
                 withContext(Dispatchers.IO) {
                     textTranslator.close()
                 }
-                textTranslator = TextTranslators.fromPref(translationPreferences.translationEngine())
-                    .build(translationPreferences, translation.fromLang, translation.toLang)
+                val engine = TextTranslators.fromPref(translationPreferences.translationEngine())
+                textTranslator = engine.build(translationPreferences, translation.fromLang, translation.toLang)
             }
             val translationMangaDir = provider.getMangaDir(translation.manga.title, translation.source)
             val saveFile = provider.getTranslationFileName(translation.chapter.name, translation.chapter.scanlator)
