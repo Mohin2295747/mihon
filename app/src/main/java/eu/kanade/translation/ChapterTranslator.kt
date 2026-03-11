@@ -5,6 +5,7 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
 import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.data.download.DownloadProvider
+import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.lang.compareToCaseInsensitiveNaturalOrder
 import eu.kanade.tachiyomi.util.system.toast
@@ -194,12 +195,10 @@ class ChapterTranslator(
 
     private suspend fun translateChapter(translation: Translation) {
         try {
-            // Check if recognizer reinitialization is needed
             if (translation.fromLang != textRecognizer.language) {
                 textRecognizer.close()
                 textRecognizer = TextRecognizer(translation.fromLang)
             }
-            // Check if translator reinitialization is needed
             if (translation.fromLang != textTranslator.fromLang || translation.toLang != textTranslator.toLang) {
                 withContext(Dispatchers.IO) {
                     textTranslator.close()
@@ -207,13 +206,8 @@ class ChapterTranslator(
                 textTranslator = TextTranslators.fromPref(translationPreferences.translationEngine())
                     .build(translationPreferences, translation.fromLang, translation.toLang)
             }
-            // Directory where translations for a manga is stored
             val translationMangaDir = provider.getMangaDir(translation.manga.title, translation.source)
-
-            // translations save file
             val saveFile = provider.getTranslationFileName(translation.chapter.name, translation.chapter.scanlator)
-
-            // Directory where chapter images is stored
             val chapterPath = downloadProvider.findChapterDir(
                 translation.chapter.name,
                 translation.chapter.scanlator,
@@ -224,10 +218,7 @@ class ChapterTranslator(
             val pages = mutableMapOf<String, PageTranslation>()
             val tmpFile = translationMangaDir.createFile("tmp")!!
             val streams = getChapterPages(chapterPath)
-            /**
-             * saving the stream to tmp file cuz i can't get the
-             * BitmapFactory.decodeStream() to work with the stream from .cbz archive
-             */
+            
             withContext(Dispatchers.IO) {
                 for ((fileName, streamFn) in streams) {
                     coroutineContext.ensureActive()
@@ -243,10 +234,8 @@ class ChapterTranslator(
             }
             tmpFile.delete()
             withContext(Dispatchers.IO) {
-                // Translate the text in blocks , this mutates the original blocks
                 textTranslator.translate(pages)
             }
-            // Serialize the Map and save to translations json file
             Json.encodeToStream(pages, translationMangaDir.createFile(saveFile)!!.openOutputStream())
             translation.status = Translation.State.TRANSLATED
         } catch (error: Throwable) {
@@ -254,7 +243,6 @@ class ChapterTranslator(
             translation.setError(errorMessage)
             logcat(LogPriority.ERROR, error)
 
-            // Show toast notification to user on main thread
             withContext(Dispatchers.Main) {
                 context.toast("Translation failed: $errorMessage")
             }
@@ -268,7 +256,6 @@ class ChapterTranslator(
         sourceLanguage: String = "auto",
         targetLanguage: String = "en"
     ): PageTranslation {
-        // Detect actual language from recognized text blocks if AUTO is used
         val detectedLanguage = if (sourceLanguage == "auto" && blocks.isNotEmpty()) {
             detectLanguageFromBlocks(blocks)
         } else {
@@ -297,63 +284,46 @@ class ChapterTranslator(
                 ),
             )
         }
-        // Smart merge overlapping text blocks with language-specific thresholds
         val (widthThresh, xThresh, yThresh) = getLanguageSpecificMergeThresholds(detectedLanguage)
         translation.blocks = smartMergeBlocks(translation.blocks, widthThresh, xThresh, yThresh)
 
         return translation
     }
 
-    /**
-     * Detect the most common language from MLKit recognized text blocks
-     * Returns ISO 639-1 language code (e.g., "ko" for Korean, "ja" for Japanese)
-     */
     private fun detectLanguageFromBlocks(blocks: List<Text.TextBlock>): String {
-        // MLKit recognizedLanguage returns BCP-47 codes (e.g., "ko" for Korean)
         val languageCounts = blocks
             .mapNotNull { it.recognizedLanguage }
             .groupingBy { it }
             .eachCount()
 
-        // Get the most common language
         val detectedLanguage = languageCounts.maxByOrNull { it.value }?.key ?: "auto"
 
         logcat { "Detected language from text blocks: $detectedLanguage (counts: $languageCounts)" }
 
-        // BCP-47 codes are usually compatible with ISO 639-1, but ensure proper formatting
         return when {
-            detectedLanguage.startsWith("ko") -> "ko" // Korean
-            detectedLanguage.startsWith("ja") -> "ja" // Japanese
-            detectedLanguage.startsWith("zh") -> "zh" // Chinese
-            detectedLanguage.startsWith("id") -> "id" // Indonesian
-            detectedLanguage.startsWith("es") -> "es" // Spanish
-            detectedLanguage.startsWith("en") -> "en" // English
-            else -> detectedLanguage.take(2).lowercase() // Take first 2 chars as fallback
+            detectedLanguage.startsWith("ko") -> "ko"
+            detectedLanguage.startsWith("ja") -> "ja"
+            detectedLanguage.startsWith("zh") -> "zh"
+            detectedLanguage.startsWith("id") -> "id"
+            detectedLanguage.startsWith("es") -> "es"
+            detectedLanguage.startsWith("en") -> "en"
+            else -> detectedLanguage.take(2).lowercase()
         }
     }
 
-    /**
-     * Get language-specific text merging thresholds
-     * Korean text has different spacing patterns than Japanese/Chinese
-     * Returns (widthThreshold, xThreshold, yThreshold)
-     */
     private fun getLanguageSpecificMergeThresholds(language: String): Triple<Int, Int, Int> {
         return when {
-            // Korean needs larger thresholds due to spacing differences in Hangul
             language == "ko" || language.lowercase().contains("korean") -> {
-                Triple(60, 35, 40)  // width=60, x=35, y=40 (vs default 50, 30, 30)
+                Triple(60, 35, 40)
             }
-            // Japanese with mixed Kanji/Hiragana
             language == "ja" || language.lowercase().contains("japanese") -> {
-                Triple(50, 30, 30)  // Default values work well
+                Triple(50, 30, 30)
             }
-            // Chinese characters are more uniform
             language == "zh" || language.lowercase().contains("chinese") -> {
-                Triple(45, 25, 28)  // Slightly tighter
+                Triple(45, 25, 28)
             }
-            // Default for other languages
             else -> {
-                Triple(50, 30, 30)  // Default thresholds
+                Triple(50, 30, 30)
             }
         }
     }
