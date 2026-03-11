@@ -17,7 +17,6 @@ object TrackMapper {
         remoteUrl: String,
         startDate: Long,
         finishDate: Long,
-        private: Boolean,
     ): Track = Track(
         id = id,
         mangaId = mangaId,
@@ -32,6 +31,5 @@ object TrackMapper {
         remoteUrl = remoteUrl,
         startDate = startDate,
         finishDate = finishDate,
-        private = private,
     )
 }

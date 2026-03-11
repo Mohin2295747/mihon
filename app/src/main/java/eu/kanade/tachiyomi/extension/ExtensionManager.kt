@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.drawable.Drawable
 import eu.kanade.domain.extension.interactor.TrustExtension
 import eu.kanade.domain.source.service.SourcePreferences
-import eu.kanade.tachiyomi.App
 import eu.kanade.tachiyomi.extension.api.ExtensionApi
 import eu.kanade.tachiyomi.extension.api.ExtensionUpdateNotifier
 import eu.kanade.tachiyomi.extension.model.Extension
@@ -16,7 +15,6 @@ import eu.kanade.tachiyomi.extension.util.ExtensionLoader
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -25,7 +23,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import logcat.LogPriority
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
@@ -81,24 +78,13 @@ class ExtensionManager(
 
     private var subLanguagesEnabledOnFirstRun = preferences.enabledLanguages().isSet()
 
-    fun getExtensionPackage(sourceId: Long): String? {
-        return installedExtensionsFlow.value.find { extension ->
-            extension.sources.any { it.id == sourceId }
-        }
-            ?.pkgName
-    }
-
-    fun getExtensionPackageAsFlow(sourceId: Long): Flow<String?> {
-        return installedExtensionsFlow.map { extensions ->
-            extensions.find { extension ->
-                extension.sources.any { it.id == sourceId }
-            }
-                ?.pkgName
-        }
-    }
-
     fun getAppIconForSource(sourceId: Long): Drawable? {
-        val pkgName = getExtensionPackage(sourceId) ?: return null
+        val pkgName = installedExtensionMapFlow.value.values
+            .find { ext ->
+                ext.sources.any { it.id == sourceId }
+            }
+            ?.pkgName
+            ?: return null
 
         return iconMap[pkgName] ?: iconMap.getOrPut(pkgName) {
             ExtensionLoader.getExtensionPackageInfoFromPkgName(context, pkgName)!!.applicationInfo!!
@@ -121,35 +107,17 @@ class ExtensionManager(
      * Loads and registers the installed extensions.
      */
     private fun initExtensions() {
-        scope.launch {
-            var lastCount = -1
-            var stabilityCounter = 0
-            val maxChecks = 12
+        val extensions = ExtensionLoader.loadExtensions(context)
 
-            for (i in 0 until maxChecks) {
-                val currentCount = ExtensionLoader.getExtensionCount(context)
-                if (currentCount == lastCount) {
-                    stabilityCounter++
-                    if (stabilityCounter >= 3) break
-                } else {
-                    stabilityCounter = 0
-                }
-                lastCount = currentCount
-                if (i < maxChecks - 1) delay(250)
-            }
+        installedExtensionMapFlow.value = extensions
+            .filterIsInstance<LoadResult.Success>()
+            .associate { it.extension.pkgName to it.extension }
 
-            val extensions = ExtensionLoader.loadExtensions(context)
+        untrustedExtensionMapFlow.value = extensions
+            .filterIsInstance<LoadResult.Untrusted>()
+            .associate { it.extension.pkgName to it.extension }
 
-            installedExtensionMapFlow.value = extensions
-                .filterIsInstance<LoadResult.Success>()
-                .associate { it.extension.pkgName to it.extension }
-
-            untrustedExtensionMapFlow.value = extensions
-                .filterIsInstance<LoadResult.Untrusted>()
-                .associate { it.extension.pkgName to it.extension }
-
-            _isInitialized.value = true
-        }
+        _isInitialized.value = true
     }
 
     /**
@@ -161,7 +129,7 @@ class ExtensionManager(
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e)
             withUIContext { context.toast(MR.strings.extension_api_error) }
-            return
+            emptyList()
         }
 
         enableAdditionalSubLanguages(extensions)

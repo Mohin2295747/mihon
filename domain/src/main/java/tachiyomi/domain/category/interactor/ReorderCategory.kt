@@ -8,13 +8,19 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.category.model.CategoryUpdate
 import tachiyomi.domain.category.repository.CategoryRepository
+import java.util.Collections
 
 class ReorderCategory(
     private val categoryRepository: CategoryRepository,
 ) {
+
     private val mutex = Mutex()
 
-    suspend fun await(category: Category, newIndex: Int) = withNonCancellableContext {
+    suspend fun moveUp(category: Category): Result = await(category, MoveTo.UP)
+
+    suspend fun moveDown(category: Category): Result = await(category, MoveTo.DOWN)
+
+    private suspend fun await(category: Category, moveTo: MoveTo) = withNonCancellableContext {
         mutex.withLock {
             val categories = categoryRepository.getAll()
                 .filterNot(Category::isSystemCategory)
@@ -25,8 +31,13 @@ class ReorderCategory(
                 return@withNonCancellableContext Result.Unchanged
             }
 
+            val newPosition = when (moveTo) {
+                MoveTo.UP -> currentIndex - 1
+                MoveTo.DOWN -> currentIndex + 1
+            }.toInt()
+
             try {
-                categories.add(newIndex, categories.removeAt(currentIndex))
+                Collections.swap(categories, currentIndex, newPosition)
 
                 val updates = categories.mapIndexed { index, category ->
                     CategoryUpdate(
@@ -44,9 +55,35 @@ class ReorderCategory(
         }
     }
 
+    suspend fun sortAlphabetically() = withNonCancellableContext {
+        mutex.withLock {
+            val updates = categoryRepository.getAll()
+                .sortedBy { category -> category.name }
+                .mapIndexed { index, category ->
+                    CategoryUpdate(
+                        id = category.id,
+                        order = index.toLong(),
+                    )
+                }
+
+            try {
+                categoryRepository.updatePartial(updates)
+                Result.Success
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e)
+                Result.InternalError(e)
+            }
+        }
+    }
+
     sealed interface Result {
         data object Success : Result
         data object Unchanged : Result
         data class InternalError(val error: Throwable) : Result
+    }
+
+    private enum class MoveTo {
+        UP,
+        DOWN,
     }
 }

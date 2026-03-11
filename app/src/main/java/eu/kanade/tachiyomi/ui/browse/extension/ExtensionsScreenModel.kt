@@ -7,10 +7,7 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.extension.interactor.GetExtensionsByType
-import eu.kanade.domain.source.interactor.GetSourcesWithFavoriteCount
 import eu.kanade.domain.source.service.SourcePreferences
-import eu.kanade.domain.ui.UiPreferences
-import eu.kanade.domain.ui.model.ExtensionsSortingMode
 import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.extension.model.Extension
@@ -38,17 +35,13 @@ import uy.kohesive.injekt.api.get
 import kotlin.time.Duration.Companion.seconds
 
 class ExtensionsScreenModel(
-    private val uiPreferences: UiPreferences = Injekt.get(),
     preferences: SourcePreferences = Injekt.get(),
     basePreferences: BasePreferences = Injekt.get(),
     private val extensionManager: ExtensionManager = Injekt.get(),
     private val getExtensions: GetExtensionsByType = Injekt.get(),
-    private val getSourcesWithFavoriteCount: GetSourcesWithFavoriteCount = Injekt.get(),
 ) : StateScreenModel<ExtensionsScreenModel.State>(State()) {
 
     private val currentDownloads = MutableStateFlow<Map<String, InstallStep>>(hashMapOf())
-
-    fun installStepFlow(pkgName: String) = currentDownloads.map { it[pkgName] ?: InstallStep.Idle }
 
     init {
         val context = Injekt.get<Application>()
@@ -57,104 +50,85 @@ class ExtensionsScreenModel(
                 ExtensionUiModel.Item(it, map[it.pkgName] ?: InstallStep.Idle)
             }
         }
-
-        screenModelScope.launchIO {
-            combine(
-                state.map { it.searchQuery }
-                    .distinctUntilChanged()
-                    .debounce(SEARCH_DEBOUNCE_MILLIS)
-                    .map { searchQueryPredicate(it ?: "") },
-                currentDownloads,
-                getExtensions.subscribe(),
-                uiPreferences.extensionsSortingMode().changes(),
-            ) { predicate, downloads, (_updates, _installed, _available, _untrusted), sortingMode ->
-                buildMap {
-                    val updates = _updates.filter(predicate).map(extensionMapper(downloads))
-                    if (updates.isNotEmpty()) {
-                        put(ExtensionUiModel.Header.Resource(MR.strings.ext_updates_pending), updates)
-                    }
-
-                    val installed = (_installed + _untrusted)
-                        .filter(predicate)
-                        .sortedWith(
-                            when (sortingMode) {
-                                ExtensionsSortingMode.ALPHABETICAL_ASC -> compareBy(String.CASE_INSENSITIVE_ORDER) {
-                                    it.name
-                                }
-                                ExtensionsSortingMode.ALPHABETICAL_DESC -> compareByDescending(
-                                    String.CASE_INSENSITIVE_ORDER,
-                                ) { it.name }
-                                ExtensionsSortingMode.NEWEST_INSTALLED -> compareByDescending {
-                                    when (it) {
-                                        is Extension.Installed -> it.installTime
-                                        is Extension.Untrusted -> it.installTime
-                                        is Extension.Available -> 0L // Should not be reached
-                                    }
-                                }
-                                ExtensionsSortingMode.OLDEST_INSTALLED -> compareBy {
-                                    when (it) {
-                                        is Extension.Installed -> it.installTime
-                                        is Extension.Untrusted -> it.installTime
-                                        is Extension.Available -> 0L // Should not be reached
-                                    }
-                                }
-                            },
-                        )
-                        .map(extensionMapper(downloads))
-                    if (installed.isNotEmpty()) {
-                        put(ExtensionUiModel.Header.Resource(MR.strings.ext_installed), installed)
-                    }
-
-                    val languagesWithExtensions = _available
-                        .filter(predicate)
-                        .groupBy { it.lang }
-                        .toSortedMap(LocaleHelper.comparator)
-                        .map { (lang, exts) ->
-                            ExtensionUiModel.Header.Text(LocaleHelper.getSourceDisplayName(lang, context)) to
-                                exts.map(extensionMapper(downloads))
+        val queryFilter: (String) -> ((Extension) -> Boolean) = { query ->
+            filter@{ extension ->
+                if (query.isEmpty()) return@filter true
+                query.split(",").any { _input ->
+                    val input = _input.trim()
+                    if (input.isEmpty()) return@any false
+                    when (extension) {
+                        is Extension.Available -> {
+                            extension.sources.any {
+                                it.name.contains(input, ignoreCase = true) ||
+                                    it.baseUrl.contains(input, ignoreCase = true) ||
+                                    it.id == input.toLongOrNull()
+                            } ||
+                                extension.name.contains(input, ignoreCase = true)
                         }
-                    if (languagesWithExtensions.isNotEmpty()) {
-                        putAll(languagesWithExtensions)
+                        is Extension.Installed -> {
+                            extension.sources.any {
+                                it.name.contains(input, ignoreCase = true) ||
+                                    it.id == input.toLongOrNull() ||
+                                    if (it is HttpSource) {
+                                        it.baseUrl.contains(input, ignoreCase = true)
+                                    } else {
+                                        false
+                                    }
+                            } ||
+                                extension.name.contains(input, ignoreCase = true)
+                        }
+                        is Extension.Untrusted -> extension.name.contains(input, ignoreCase = true)
                     }
                 }
             }
-                .collectLatest { items ->
+        }
+
+        screenModelScope.launchIO {
+            combine(
+                state.map { it.searchQuery }.distinctUntilChanged().debounce(SEARCH_DEBOUNCE_MILLIS),
+                currentDownloads,
+                getExtensions.subscribe(),
+            ) { query, downloads, (_updates, _installed, _available, _untrusted) ->
+                val searchQuery = query ?: ""
+
+                val itemsGroups: ItemGroups = mutableMapOf()
+
+                val updates = _updates.filter(queryFilter(searchQuery)).map(extensionMapper(downloads))
+                if (updates.isNotEmpty()) {
+                    itemsGroups[ExtensionUiModel.Header.Resource(MR.strings.ext_updates_pending)] = updates
+                }
+
+                val installed = _installed.filter(queryFilter(searchQuery)).map(extensionMapper(downloads))
+                val untrusted = _untrusted.filter(queryFilter(searchQuery)).map(extensionMapper(downloads))
+                if (installed.isNotEmpty() || untrusted.isNotEmpty()) {
+                    itemsGroups[ExtensionUiModel.Header.Resource(MR.strings.ext_installed)] = installed + untrusted
+                }
+
+                val languagesWithExtensions = _available
+                    .filter(queryFilter(searchQuery))
+                    .groupBy { it.lang }
+                    .toSortedMap(LocaleHelper.comparator)
+                    .map { (lang, exts) ->
+                        ExtensionUiModel.Header.Text(LocaleHelper.getSourceDisplayName(lang, context)) to
+                            exts.map(extensionMapper(downloads))
+                    }
+                if (languagesWithExtensions.isNotEmpty()) {
+                    itemsGroups.putAll(languagesWithExtensions)
+                }
+
+                itemsGroups
+            }
+                .collectLatest {
                     mutableState.update { state ->
                         state.copy(
                             isLoading = false,
-                            items = items,
+                            items = it,
                         )
                     }
                 }
         }
 
         screenModelScope.launchIO { findAvailableExtensions() }
-
-        screenModelScope.launchIO {
-            combine(
-                getSourcesWithFavoriteCount.subscribe(),
-                extensionManager.installedExtensionsFlow,
-            ) { sourcesWithCount, installed ->
-                val librarySourceIds = sourcesWithCount
-                    .filter { it.second > 0 }
-                    .map { it.first.id }
-                    .toSet()
-
-                var missingCount = 0
-                for (sourceId in librarySourceIds) {
-                    val installedPkg = extensionManager.getExtensionPackage(sourceId)
-                    if (installedPkg == null) missingCount++
-                }
-                missingCount
-            }
-                .collectLatest { missingCount ->
-                    mutableState.update { state ->
-                        state.copy(
-                            potentialMissingCount = missingCount,
-                        )
-                    }
-                }
-        }
 
         preferences.extensionUpdatesCount().changes()
             .onEach { mutableState.update { state -> state.copy(updates = it) } }
@@ -163,50 +137,12 @@ class ExtensionsScreenModel(
         basePreferences.extensionInstaller().changes()
             .onEach { mutableState.update { state -> state.copy(installer = it) } }
             .launchIn(screenModelScope)
-
-        uiPreferences.extensionsSortingMode().changes()
-            .onEach { mutableState.update { state -> state.copy(sortingMode = it) } }
-            .launchIn(screenModelScope)
-    }
-
-    fun searchQueryPredicate(query: String): (Extension) -> Boolean {
-        val subqueries = query.split(",")
-            .map { it.trim() }
-            .filterNot { it.isBlank() }
-
-        if (subqueries.isEmpty()) return { true }
-
-        return { extension ->
-            subqueries.any { subquery ->
-                if (extension.name.contains(subquery, ignoreCase = true)) return@any true
-
-                when (extension) {
-                    is Extension.Installed -> extension.sources.any { source ->
-                        source.name.contains(subquery, ignoreCase = true) ||
-                            (source as? HttpSource)?.baseUrl?.contains(subquery, ignoreCase = true) == true ||
-                            source.id == subquery.toLongOrNull()
-                    }
-
-                    is Extension.Available -> extension.sources.any {
-                        it.name.contains(subquery, ignoreCase = true) ||
-                            it.baseUrl.contains(subquery, ignoreCase = true) ||
-                            it.id == subquery.toLongOrNull()
-                    }
-
-                    else -> false
-                }
-            }
-        }
     }
 
     fun search(query: String?) {
         mutableState.update {
             it.copy(searchQuery = query)
         }
-    }
-
-    fun setSorting(mode: ExtensionsSortingMode) {
-        uiPreferences.extensionsSortingMode().set(mode)
     }
 
     fun updateAllExtensions() {
@@ -233,7 +169,6 @@ class ExtensionsScreenModel(
 
     fun cancelInstallUpdateExtension(extension: Extension) {
         extensionManager.cancelInstallUpdateExtension(extension)
-        removeDownloadState(extension)
     }
 
     private fun addDownloadState(extension: Extension, installStep: InstallStep) {
@@ -267,57 +202,6 @@ class ExtensionsScreenModel(
         }
     }
 
-    init {
-        screenModelScope.launchIO {
-            combine(
-                getSourcesWithFavoriteCount.subscribe(),
-                extensionManager.availableExtensionsFlow,
-                extensionManager.untrustedExtensionsFlow,
-                extensionManager.installedExtensionsFlow,
-            ) { sourcesWithCount, available, untrusted, installed ->
-                val librarySourceIds = sourcesWithCount
-                    .filter { it.second > 0 }
-                    .map { it.first.id }
-                    .toSet()
-
-                val missing = mutableListOf<eu.kanade.tachiyomi.extension.model.Extension>()
-
-                for (sourceId in librarySourceIds) {
-                    val installedPkg = extensionManager.getExtensionPackage(sourceId)
-                    if (installedPkg != null) continue
-
-                    val avail = available.find { ext -> ext.sources.any { it.id == sourceId } }
-                    if (avail != null) {
-                        val untrustedMatch = untrusted.find { it.pkgName == avail.pkgName }
-                        if (untrustedMatch != null) {
-                            missing.add(untrustedMatch)
-                        } else {
-                            missing.add(avail)
-                        }
-                        continue
-                    }
-
-                    val un = untrusted.find { untrustedExt ->
-                        available.any { a ->
-                            a.pkgName == untrustedExt.pkgName &&
-                                a.sources.any { it.id == sourceId }
-                        }
-                    }
-                    if (un != null) missing.add(un)
-                }
-
-                missing.distinctBy { it.pkgName }
-            }
-                .collectLatest { missingExtensions ->
-                    mutableState.update { state ->
-                        state.copy(
-                            missingLibraryExtensions = missingExtensions,
-                        )
-                    }
-                }
-        }
-    }
-
     fun trustExtension(extension: Extension.Untrusted) {
         screenModelScope.launch {
             extensionManager.trust(extension)
@@ -329,18 +213,15 @@ class ExtensionsScreenModel(
         val isLoading: Boolean = true,
         val isRefreshing: Boolean = false,
         val items: ItemGroups = mutableMapOf(),
-        val missingLibraryExtensions: List<eu.kanade.tachiyomi.extension.model.Extension> = emptyList(),
-        val potentialMissingCount: Int = 0,
         val updates: Int = 0,
         val installer: BasePreferences.ExtensionInstaller? = null,
         val searchQuery: String? = null,
-        val sortingMode: ExtensionsSortingMode = ExtensionsSortingMode.ALPHABETICAL_ASC,
     ) {
         val isEmpty = items.isEmpty()
     }
 }
 
-typealias ItemGroups = Map<ExtensionUiModel.Header, List<ExtensionUiModel.Item>>
+typealias ItemGroups = MutableMap<ExtensionUiModel.Header, List<ExtensionUiModel.Item>>
 
 object ExtensionUiModel {
     sealed interface Header {

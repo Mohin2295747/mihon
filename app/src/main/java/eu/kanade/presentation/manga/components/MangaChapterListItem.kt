@@ -55,9 +55,9 @@ fun MangaChapterListItem(
     read: Boolean,
     bookmark: Boolean,
     selected: Boolean,
-    showDownloadIndicator: Boolean = true,
     downloadIndicatorEnabled: Boolean,
     downloadStateProvider: () -> Download.State,
+    // TachiyomiAT
     translationStateProvider: () -> Translation.State,
     downloadProgressProvider: () -> Int,
     chapterSwipeStartAction: LibraryPreferences.ChapterSwipeAction,
@@ -65,6 +65,7 @@ fun MangaChapterListItem(
     onLongClick: () -> Unit,
     onClick: () -> Unit,
     onDownloadClick: ((ChapterDownloadAction) -> Unit)?,
+    // TachiyomiAT
     onTranslationClick: ((ChapterTranslationAction) -> Unit)?,
     onChapterSwipe: (LibraryPreferences.ChapterSwipeAction) -> Unit,
     modifier: Modifier = Modifier,
@@ -174,7 +175,7 @@ fun MangaChapterListItem(
                     }
                 }
             }
-            
+            // TachiyomiAT
             if (downloadStateProvider() == Download.State.DOWNLOADED) {
                 ChapterTranslationIndicator(
                     enabled = true,
@@ -183,16 +184,13 @@ fun MangaChapterListItem(
                     onClick = { onTranslationClick?.invoke(it) },
                 )
             }
-
-            if (showDownloadIndicator) {
-                ChapterDownloadIndicator(
-                    enabled = downloadIndicatorEnabled,
-                    modifier = Modifier.padding(start = 4.dp),
-                    downloadStateProvider = downloadStateProvider,
-                    downloadProgressProvider = downloadProgressProvider,
-                    onClick = { onDownloadClick?.invoke(it) },
-                )
-            }
+            ChapterDownloadIndicator(
+                enabled = downloadIndicatorEnabled,
+                modifier = Modifier.padding(start = 4.dp),
+                downloadStateProvider = downloadStateProvider,
+                downloadProgressProvider = downloadProgressProvider,
+                onClick = { onDownloadClick?.invoke(it) },
+            )
         }
     }
 }

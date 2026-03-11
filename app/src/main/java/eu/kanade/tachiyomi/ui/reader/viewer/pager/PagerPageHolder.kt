@@ -7,7 +7,6 @@ import android.view.LayoutInflater
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import androidx.core.view.isVisible
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
-import eu.kanade.presentation.util.formattedMessage
 import eu.kanade.tachiyomi.databinding.ReaderErrorBinding
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.model.InsertPage
@@ -30,14 +29,12 @@ import kotlinx.coroutines.supervisorScope
 import logcat.LogPriority
 import okio.Buffer
 import okio.BufferedSource
-import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.ImageUtil
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.translation.TranslationPreferences
-import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -49,11 +46,13 @@ class PagerPageHolder(
     readerThemedContext: Context,
     val viewer: PagerViewer,
     val page: ReaderPage,
+    // TachiyomiAT
     translationPreferences: TranslationPreferences = Injekt.get(),
     private val font: TranslationFont = TranslationFont.fromPref(translationPreferences.translationFont()),
     readerPreferences: ReaderPreferences = Injekt.get(),
 ) : ReaderPageImageView(readerThemedContext), ViewPagerAdapter.PositionableView {
 
+    // TachiyomiAT
     private var showTranslations = true
     private var translationsView: PagerTranslationsView? = null
 
@@ -82,6 +81,7 @@ class PagerPageHolder(
 
     init {
         loadJob = scope.launch { loadPageAndProcessStatus() }
+        // TachiyomiAT
         showTranslations = readerPreferences.showTranslations().get()
         readerPreferences.showTranslations().changes().onEach {
             showTranslations = it
@@ -126,9 +126,9 @@ class PagerPageHolder(
             }
             page.statusFlow.collectLatest { state ->
                 when (state) {
-                    Page.State.Queue -> setQueued()
-                    Page.State.LoadPage -> setLoading()
-                    Page.State.DownloadImage -> {
+                    Page.State.QUEUE -> setQueued()
+                    Page.State.LOAD_PAGE -> setLoading()
+                    Page.State.DOWNLOAD_IMAGE -> {
                         setDownloading()
                         page.progressFlow.collectLatest { value ->
                             progressIndicator?.setProgress(value)
@@ -139,7 +139,7 @@ class PagerPageHolder(
                         // TachiyomiAT
                         addTranslationsView()
                     }
-                    is Page.State.Error -> setError(state.error)
+                    Page.State.ERROR -> setError()
                 }
             }
         }
@@ -211,7 +211,7 @@ class PagerPageHolder(
         } catch (e: Throwable) {
             logcat(LogPriority.ERROR, e)
             withUIContext {
-                setError(e)
+                setError()
             }
         }
     }
@@ -276,15 +276,17 @@ class PagerPageHolder(
     /**
      * Called when the page has an error.
      */
-    private fun setError(error: Throwable?) {
+    private fun setError() {
         progressIndicator?.hide()
-        showErrorLayout(error)
+        showErrorLayout()
+        // TachiyomiAT
         translationsView?.hide()
     }
 
     override fun onImageLoaded() {
         super.onImageLoaded()
         progressIndicator?.hide()
+        // TachiyomiAT
         updateTranslationCoords(pageView as SubsamplingScaleImageView)
         // TachiyomiAT
         translationsView?.show()
@@ -293,9 +295,10 @@ class PagerPageHolder(
     /**
      * Called when an image fails to decode.
      */
-    override fun onImageLoadError(error: Throwable?) {
-        super.onImageLoadError(error)
-        setError(error)
+    override fun onImageLoadError() {
+        super.onImageLoadError()
+        setError()
+        // TachiyomiAT
         translationsView?.hide()
     }
 
@@ -305,6 +308,7 @@ class PagerPageHolder(
     override fun onScaleChanged(newScale: Float) {
         super.onScaleChanged(newScale)
         viewer.activity.hideMenu()
+        // TachiyomiAT
         updateTranslationCoords(pageView as SubsamplingScaleImageView)
     }
 
@@ -396,7 +400,7 @@ class PagerPageHolder(
         translationsView?.scaleState?.value = vi.scale
     }
 
-    private fun showErrorLayout(error: Throwable?): ReaderErrorBinding {
+    private fun showErrorLayout(): ReaderErrorBinding {
         if (errorLayout == null) {
             errorLayout = ReaderErrorBinding.inflate(LayoutInflater.from(context), this, true)
             errorLayout?.actionRetry?.viewer = viewer
@@ -411,16 +415,11 @@ class PagerPageHolder(
             if (imageUrl.startsWith("http", true)) {
                 errorLayout?.actionOpenInWebView?.viewer = viewer
                 errorLayout?.actionOpenInWebView?.setOnClickListener {
-                    val sourceId = viewer.activity.viewModel.manga?.source
-
-                    val intent = WebViewActivity.newIntent(context, imageUrl, sourceId)
+                    val intent = WebViewActivity.newIntent(context, imageUrl)
                     context.startActivity(intent)
                 }
             }
         }
-
-        errorLayout?.errorMessage?.text = with(context) { error?.formattedMessage }
-            ?: context.stringResource(MR.strings.decode_image_error)
 
         errorLayout?.root?.isVisible = true
         return errorLayout!!

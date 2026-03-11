@@ -14,7 +14,7 @@ abstract class BaseOAuthLoginActivity : BaseActivity() {
 
     internal val trackerManager: TrackerManager by injectLazy()
 
-    abstract fun handleResult(uri: Uri)
+    abstract fun handleResult(data: Uri?)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -23,12 +23,7 @@ abstract class BaseOAuthLoginActivity : BaseActivity() {
             LoadingScreen()
         }
 
-        val data = intent.data
-        if (data == null) {
-            returnToSettings()
-        } else {
-            handleResult(data)
-        }
+        handleResult(intent.data)
     }
 
     internal fun returnToSettings() {

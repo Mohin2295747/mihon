@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.data.track
 
 import androidx.annotation.CallSuper
+import androidx.annotation.ColorInt
 import androidx.annotation.DrawableRes
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.tachiyomi.data.database.models.Track
@@ -21,7 +22,8 @@ interface Tracker {
     // Application and remote support for reading dates
     val supportsReadingDates: Boolean
 
-    val supportsPrivateTracking: Boolean
+    @ColorInt
+    fun getLogoColor(): Int
 
     @DrawableRes
     fun getLogo(): Int
@@ -80,6 +82,4 @@ interface Tracker {
     suspend fun setRemoteStartDate(track: Track, epochMillis: Long)
 
     suspend fun setRemoteFinishDate(track: Track, epochMillis: Long)
-
-    suspend fun setRemotePrivate(track: Track, private: Boolean)
 }

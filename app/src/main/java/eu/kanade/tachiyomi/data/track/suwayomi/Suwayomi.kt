@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.data.track.suwayomi
 
+import android.graphics.Color
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Track
@@ -17,15 +18,14 @@ class Suwayomi(id: Long) : BaseTracker(id, "Suwayomi"), EnhancedTracker {
 
     val api by lazy { SuwayomiApi(id) }
 
-    override fun getLogo() = R.drawable.brand_suwayomi
+    override fun getLogo() = R.drawable.ic_tracker_suwayomi
+
+    override fun getLogoColor() = Color.rgb(255, 35, 35) // TODO
 
     companion object {
         const val UNREAD = 1L
         const val READING = 2L
         const val COMPLETED = 3L
-
-        private const val TRACKER_DELETE_KEY = "Tracker Delete"
-        private const val TRACKER_DELETE_DEFAULT = false
     }
 
     override fun getStatusList(): List<Long> = listOf(UNREAD, READING, COMPLETED)
@@ -58,7 +58,7 @@ class Suwayomi(id: Long) : BaseTracker(id, "Suwayomi"), EnhancedTracker {
             }
         }
 
-        return api.updateProgress(track, getPrefTrackerDelete())
+        return api.updateProgress(track)
     }
 
     override suspend fun bind(track: Track, hasReadChapters: Boolean): Track {
@@ -70,7 +70,7 @@ class Suwayomi(id: Long) : BaseTracker(id, "Suwayomi"), EnhancedTracker {
     }
 
     override suspend fun refresh(track: Track): Track {
-        val remoteTrack = api.getTrackSearch(track.remote_id)
+        val remoteTrack = api.getTrackSearch(track.tracking_url)
         track.copyPersonalFrom(remoteTrack)
         track.total_chapters = remoteTrack.total_chapters
         return track
@@ -88,13 +88,14 @@ class Suwayomi(id: Long) : BaseTracker(id, "Suwayomi"), EnhancedTracker {
 
     override suspend fun match(manga: DomainManga): TrackSearch? =
         try {
-            api.getTrackSearch(manga.url.getMangaId())
+            api.getTrackSearch(manga.url)
         } catch (e: Exception) {
             null
         }
 
-    override fun isTrackFrom(track: DomainTrack, manga: DomainManga, source: Source?): Boolean =
-        track.remoteUrl == manga.url && source?.let { accept(it) } == true
+    override fun isTrackFrom(track: DomainTrack, manga: DomainManga, source: Source?): Boolean = source?.let {
+        accept(it)
+    } == true
 
     override fun migrateTrack(track: DomainTrack, manga: DomainManga, newSource: Source): DomainTrack? =
         if (accept(newSource)) {
@@ -102,12 +103,4 @@ class Suwayomi(id: Long) : BaseTracker(id, "Suwayomi"), EnhancedTracker {
         } else {
             null
         }
-
-    private fun String.getMangaId(): Long =
-        this.substringAfterLast('/').toLong()
-
-    private fun getPrefTrackerDelete(): Boolean {
-        val preferences = api.sourcePreferences()
-        return preferences.getBoolean(TRACKER_DELETE_KEY, TRACKER_DELETE_DEFAULT)
-    }
 }

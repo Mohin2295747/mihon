@@ -9,7 +9,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -29,10 +28,7 @@ import androidx.compose.material.icons.outlined.BookmarkRemove
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.Download
-import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.RemoveDone
-import androidx.compose.material.icons.outlined.SwapCalls
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -52,10 +48,8 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.DownloadDropdownMenu
-import eu.kanade.presentation.components.DropdownMenu
 import eu.kanade.presentation.manga.DownloadAction
 import eu.kanade.tachiyomi.R
 import kotlinx.coroutines.Job
@@ -91,10 +85,10 @@ fun MangaBottomActionMenu(
         ) {
             val haptic = LocalHapticFeedback.current
             val confirm = remember { mutableStateListOf(false, false, false, false, false, false, false) }
-            var resetJob by remember { mutableStateOf<Job?>(null) }
+            var resetJob: Job? = remember { null }
             val onLongClickItem: (Int) -> Unit = { toConfirmIndex ->
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                confirm.indices.forEach { i -> confirm[i] = i == toConfirmIndex }
+                (0..<7).forEach { i -> confirm[i] = i == toConfirmIndex }
                 resetJob?.cancel()
                 resetJob = scope.launch {
                     delay(1.seconds)
@@ -191,7 +185,7 @@ private fun RowScope.Button(
         targetValue = if (toConfirm) 2f else 1f,
         label = "weight",
     )
-    Box(
+    Column(
         modifier = Modifier
             .size(48.dp)
             .weight(animatedWeight)
@@ -201,28 +195,24 @@ private fun RowScope.Button(
                 onLongClick = onLongClick,
                 onClick = onClick,
             ),
-        contentAlignment = Alignment.Center,
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Column(
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
+        Icon(
+            imageVector = icon,
+            contentDescription = title,
+        )
+        AnimatedVisibility(
+            visible = toConfirm,
+            enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+            exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = title,
+            Text(
+                text = title,
+                overflow = TextOverflow.Visible,
+                maxLines = 1,
+                style = MaterialTheme.typography.labelSmall,
             )
-            AnimatedVisibility(
-                visible = toConfirm,
-                enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
-                exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
-            ) {
-                Text(
-                    text = title,
-                    overflow = TextOverflow.Visible,
-                    maxLines = 1,
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
         }
         content?.invoke()
     }
@@ -236,7 +226,6 @@ fun LibraryBottomActionMenu(
     onMarkAsUnreadClicked: () -> Unit,
     onDownloadClicked: ((DownloadAction) -> Unit)?,
     onDeleteClicked: () -> Unit,
-    onMigrateClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     AnimatedVisibility(
@@ -251,18 +240,17 @@ fun LibraryBottomActionMenu(
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
             val haptic = LocalHapticFeedback.current
-            val confirm = remember { mutableStateListOf(false, false, false, false, false, false) }
-            var resetJob by remember { mutableStateOf<Job?>(null) }
+            val confirm = remember { mutableStateListOf(false, false, false, false, false) }
+            var resetJob: Job? = remember { null }
             val onLongClickItem: (Int) -> Unit = { toConfirmIndex ->
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                confirm.indices.forEach { i -> confirm[i] = i == toConfirmIndex }
+                (0..<5).forEach { i -> confirm[i] = i == toConfirmIndex }
                 resetJob?.cancel()
                 resetJob = scope.launch {
                     delay(1.seconds)
                     if (isActive) confirm[toConfirmIndex] = false
                 }
             }
-            val itemOverflow = onDownloadClicked != null
             Row(
                 modifier = Modifier
                     .windowInsetsPadding(
@@ -301,57 +289,22 @@ fun LibraryBottomActionMenu(
                         onLongClick = { onLongClickItem(3) },
                         onClick = { downloadExpanded = !downloadExpanded },
                     ) {
+                        val onDismissRequest = { downloadExpanded = false }
                         DownloadDropdownMenu(
                             expanded = downloadExpanded,
-                            onDismissRequest = { downloadExpanded = false },
+                            onDismissRequest = onDismissRequest,
                             onDownloadClicked = onDownloadClicked,
-                            offset = BottomBarMenuDpOffset,
                         )
                     }
                 }
-                if (!itemOverflow) {
-                    Button(
-                        title = stringResource(MR.strings.migrate),
-                        icon = Icons.Outlined.SwapCalls,
-                        toConfirm = confirm[4],
-                        onLongClick = { onLongClickItem(4) },
-                        onClick = onMigrateClicked,
-                    )
-                    Button(
-                        title = stringResource(MR.strings.action_delete),
-                        icon = Icons.Outlined.Delete,
-                        toConfirm = confirm[5],
-                        onLongClick = { onLongClickItem(5) },
-                        onClick = onDeleteClicked,
-                    )
-                } else {
-                    var overflowMenuOpen by remember { mutableStateOf(false) }
-                    Button(
-                        title = stringResource(MR.strings.label_more),
-                        icon = Icons.Outlined.MoreVert,
-                        toConfirm = false,
-                        onLongClick = {},
-                        onClick = { overflowMenuOpen = true },
-                    ) {
-                        DropdownMenu(
-                            expanded = overflowMenuOpen,
-                            onDismissRequest = { overflowMenuOpen = false },
-                            offset = BottomBarMenuDpOffset,
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(MR.strings.migrate)) },
-                                onClick = onMigrateClicked,
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(MR.strings.action_delete)) },
-                                onClick = onDeleteClicked,
-                            )
-                        }
-                    }
-                }
+                Button(
+                    title = stringResource(MR.strings.action_delete),
+                    icon = Icons.Outlined.Delete,
+                    toConfirm = confirm[4],
+                    onLongClick = { onLongClickItem(4) },
+                    onClick = onDeleteClicked,
+                )
             }
         }
     }
 }
-
-private val BottomBarMenuDpOffset = DpOffset(0.dp, 0.dp)

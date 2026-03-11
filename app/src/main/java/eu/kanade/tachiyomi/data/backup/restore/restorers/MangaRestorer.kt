@@ -129,7 +129,6 @@ class MangaRestorer(
                 updateStrategy = manga.updateStrategy.let(UpdateStrategyColumnAdapter::encode),
                 version = manga.version,
                 isSyncing = 1,
-                notes = manga.notes,
             )
         }
         return manga
@@ -139,7 +138,9 @@ class MangaRestorer(
         manga: Manga,
     ): Manga {
         return manga.copy(
+            initialized = manga.description != null,
             id = insertManga(manga),
+            version = manga.version,
         )
     }
 
@@ -260,7 +261,6 @@ class MangaRestorer(
                 dateAdded = manga.dateAdded,
                 updateStrategy = manga.updateStrategy,
                 version = manga.version,
-                notes = manga.notes,
             )
             mangasQueries.selectLastInsertedRowId()
         }
@@ -404,7 +404,6 @@ class MangaRestorer(
                         track.remoteUrl,
                         track.startDate,
                         track.finishDate,
-                        track.private,
                         track.id,
                     )
                 }

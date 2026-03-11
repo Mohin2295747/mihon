@@ -14,40 +14,21 @@ interface PreferenceStore {
 
     fun getStringSet(key: String, defaultValue: Set<String> = emptySet()): Preference<Set<String>>
 
-    fun <T> getObjectFromString(
+    fun <T> getObject(
         key: String,
         defaultValue: T,
         serializer: (T) -> String,
         deserializer: (String) -> T,
     ): Preference<T>
 
-    fun <T> getObjectFromInt(
-        key: String,
-        defaultValue: T,
-        serializer: (T) -> Int,
-        deserializer: (Int) -> T,
-    ): Preference<T>
-
     fun getAll(): Map<String, *>
-}
-
-fun PreferenceStore.getLongArray(
-    key: String,
-    defaultValue: List<Long>,
-): Preference<List<Long>> {
-    return getObjectFromString(
-        key = key,
-        defaultValue = defaultValue,
-        serializer = { it.joinToString(",") },
-        deserializer = { it.split(",").mapNotNull { l -> l.toLongOrNull() } },
-    )
 }
 
 inline fun <reified T : Enum<T>> PreferenceStore.getEnum(
     key: String,
     defaultValue: T,
 ): Preference<T> {
-    return getObjectFromString(
+    return getObject(
         key = key,
         defaultValue = defaultValue,
         serializer = { it.name },

@@ -52,23 +52,11 @@ class InMemoryPreferenceStore(
     }
 
     @Suppress("UNCHECKED_CAST")
-    override fun <T> getObjectFromString(
+    override fun <T> getObject(
         key: String,
         defaultValue: T,
         serializer: (T) -> String,
         deserializer: (String) -> T,
-    ): Preference<T> {
-        val default = InMemoryPreference(key, null, defaultValue)
-        val data: T? = preferences[key]?.get() as? T
-        return if (data == null) default else InMemoryPreference(key, data, defaultValue)
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    override fun <T> getObjectFromInt(
-        key: String,
-        defaultValue: T,
-        serializer: (T) -> Int,
-        deserializer: (Int) -> T,
     ): Preference<T> {
         val default = InMemoryPreference(key, null, defaultValue)
         val data: T? = preferences[key]?.get() as? T

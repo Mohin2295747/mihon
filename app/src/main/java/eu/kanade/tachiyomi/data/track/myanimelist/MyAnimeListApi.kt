@@ -10,12 +10,15 @@ import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALManga
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALOAuth
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALSearchResult
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALUser
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALUserSearchResult
 import eu.kanade.tachiyomi.network.DELETE
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.network.parseAs
 import eu.kanade.tachiyomi.util.PkceUtil
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.serialization.json.Json
 import okhttp3.FormBody
 import okhttp3.Headers
@@ -75,15 +78,15 @@ class MyAnimeListApi(
                 // MAL API throws a 400 when the query is over 64 characters...
                 .appendQueryParameter("q", query.take(64))
                 .appendQueryParameter("nsfw", "true")
-                .appendQueryParameter("fields", SEARCH_FIELDS)
                 .build()
             with(json) {
                 authClient.newCall(GET(url.toString()))
                     .awaitSuccess()
                     .parseAs<MALSearchResult>()
                     .data
-                    .filter { !(it.node.mediaType.contains("novel")) }
-                    .map { parseSearchItem(it.node) }
+                    .map { async { getMangaDetails(it.node.id) } }
+                    .awaitAll()
+                    .filter { !it.publishing_type.contains("novel") }
             }
         }
     }
@@ -92,13 +95,29 @@ class MyAnimeListApi(
         return withIOContext {
             val url = "$BASE_API_URL/manga".toUri().buildUpon()
                 .appendPath(id.toString())
-                .appendQueryParameter("fields", SEARCH_FIELDS)
+                .appendQueryParameter(
+                    "fields",
+                    "id,title,synopsis,num_chapters,mean,main_picture,status,media_type,start_date",
+                )
                 .build()
             with(json) {
                 authClient.newCall(GET(url.toString()))
                     .awaitSuccess()
                     .parseAs<MALManga>()
-                    .let { parseSearchItem(it) }
+                    .let {
+                        TrackSearch.create(trackId).apply {
+                            remote_id = it.id
+                            title = it.title
+                            summary = it.synopsis
+                            total_chapters = it.numChapters
+                            score = it.mean
+                            cover_url = it.covers.large
+                            tracking_url = "https://myanimelist.net/manga/$remote_id"
+                            publishing_status = it.status.replace("_", " ")
+                            publishing_type = it.mediaType.replace("_", " ")
+                            start_date = it.startDate ?: ""
+                        }
+                    }
             }
         }
     }
@@ -162,7 +181,8 @@ class MyAnimeListApi(
 
             val matches = myListSearchResult.data
                 .filter { it.node.title.contains(query, ignoreCase = true) }
-                .map { parseSearchItem(it.node) }
+                .map { async { getMangaDetails(it.node.id) } }
+                .awaitAll()
 
             // Check next page if there's more
             if (!myListSearchResult.paging.next.isNullOrBlank()) {
@@ -173,10 +193,10 @@ class MyAnimeListApi(
         }
     }
 
-    private suspend fun getListPage(offset: Int): MALSearchResult {
+    private suspend fun getListPage(offset: Int): MALUserSearchResult {
         return withIOContext {
             val urlBuilder = "$BASE_API_URL/users/@me/mangalist".toUri().buildUpon()
-                .appendQueryParameter("fields", SEARCH_FIELDS)
+                .appendQueryParameter("fields", "list_status{start_date,finish_date}")
                 .appendQueryParameter("limit", LIST_PAGINATION_AMOUNT.toString())
             if (offset > 0) {
                 urlBuilder.appendQueryParameter("offset", offset.toString())
@@ -205,28 +225,6 @@ class MyAnimeListApi(
         }
     }
 
-    private fun parseSearchItem(searchItem: MALManga): TrackSearch {
-        return TrackSearch.create(trackId).apply {
-            remote_id = searchItem.id
-            title = searchItem.title
-            summary = searchItem.synopsis
-            total_chapters = searchItem.numChapters
-            score = searchItem.mean
-            cover_url = searchItem.covers?.large.orEmpty()
-            tracking_url = "https://myanimelist.net/manga/$remote_id"
-            publishing_status = searchItem.status.replace("_", " ")
-            publishing_type = searchItem.mediaType.replace("_", " ")
-            start_date = searchItem.startDate ?: ""
-            artists = searchItem.authors
-                .filter { authorNode -> authorNode.role == "Art" }
-                .mapNotNull { authorNode -> authorNode.node.getFullName() }
-            authors = searchItem.authors
-                // count all with "Story" or "Story & Art" as authors, like is done for library entries
-                .filter { authorNode -> authorNode.role.contains("Story") }
-                .mapNotNull { authorNode -> authorNode.node.getFullName() }
-        }
-    }
-
     private fun parseDate(isoDate: String): Long {
         return SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(isoDate)?.time ?: 0L
     }
@@ -238,7 +236,7 @@ class MyAnimeListApi(
         return try {
             val outputDf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
             outputDf.format(epochTime)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             null
         }
     }
@@ -248,9 +246,6 @@ class MyAnimeListApi(
 
         private const val BASE_OAUTH_URL = "https://myanimelist.net/v1/oauth2"
         private const val BASE_API_URL = "https://api.myanimelist.net/v2"
-
-        private const val SEARCH_FIELDS =
-            "id,title,synopsis,num_chapters,mean,main_picture,status,media_type,start_date,authors{first_name,last_name}"
 
         private const val LIST_PAGINATION_AMOUNT = 250
 

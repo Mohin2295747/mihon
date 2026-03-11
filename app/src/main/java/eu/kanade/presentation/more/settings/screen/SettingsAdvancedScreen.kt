@@ -48,7 +48,8 @@ import eu.kanade.tachiyomi.network.PREF_DOH_SHECAN
 import eu.kanade.tachiyomi.ui.more.OnboardingScreen
 import eu.kanade.tachiyomi.util.CrashLogUtil
 import eu.kanade.tachiyomi.util.system.GLUtil
-import eu.kanade.tachiyomi.util.system.isReleaseBuildType
+import eu.kanade.tachiyomi.util.system.isDevFlavor
+import eu.kanade.tachiyomi.util.system.isPreviewBuildType
 import eu.kanade.tachiyomi.util.system.isShizukuInstalled
 import eu.kanade.tachiyomi.util.system.powerManager
 import eu.kanade.tachiyomi.util.system.setDefaultSettings
@@ -63,7 +64,6 @@ import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.ImageUtil
 import tachiyomi.core.common.util.system.logcat
-import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.manga.interactor.ResetViewerFlags
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -86,7 +86,6 @@ object SettingsAdvancedScreen : SearchableSettings {
 
         val basePreferences = remember { Injekt.get<BasePreferences>() }
         val networkPreferences = remember { Injekt.get<NetworkPreferences>() }
-        val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
 
         return listOf(
             Preference.PreferenceItem.TextPreference(
@@ -99,7 +98,7 @@ object SettingsAdvancedScreen : SearchableSettings {
                 },
             ),
             Preference.PreferenceItem.SwitchPreference(
-                preference = networkPreferences.verboseLogging(),
+                pref = networkPreferences.verboseLogging(),
                 title = stringResource(MR.strings.pref_verbose_logging),
                 subtitle = stringResource(MR.strings.pref_verbose_logging_summary),
                 onValueChanged = {
@@ -127,7 +126,7 @@ object SettingsAdvancedScreen : SearchableSettings {
             getBackgroundActivityGroup(),
             getDataGroup(),
             getNetworkGroup(networkPreferences = networkPreferences),
-            getLibraryGroup(libraryPreferences = libraryPreferences),
+            getLibraryGroup(),
             getReaderGroup(basePreferences = basePreferences),
             getExtensionsGroup(basePreferences = basePreferences),
         )
@@ -238,7 +237,8 @@ object SettingsAdvancedScreen : SearchableSettings {
                     },
                 ),
                 Preference.PreferenceItem.ListPreference(
-                    preference = networkPreferences.dohProvider(),
+                    pref = networkPreferences.dohProvider(),
+                    title = stringResource(MR.strings.pref_dns_over_https),
                     entries = persistentMapOf(
                         -1 to stringResource(MR.strings.disabled),
                         PREF_DOH_CLOUDFLARE to "Cloudflare",
@@ -254,14 +254,13 @@ object SettingsAdvancedScreen : SearchableSettings {
                         PREF_DOH_NJALLA to "Njalla",
                         PREF_DOH_SHECAN to "Shecan",
                     ),
-                    title = stringResource(MR.strings.pref_dns_over_https),
                     onValueChanged = {
                         context.toast(MR.strings.requires_app_restart)
                         true
                     },
                 ),
                 Preference.PreferenceItem.EditTextPreference(
-                    preference = userAgentPref,
+                    pref = userAgentPref,
                     title = stringResource(MR.strings.pref_user_agent_string),
                     onValueChanged = {
                         try {
@@ -288,9 +287,7 @@ object SettingsAdvancedScreen : SearchableSettings {
     }
 
     @Composable
-    private fun getLibraryGroup(
-        libraryPreferences: LibraryPreferences,
-    ): Preference.PreferenceGroup {
+    private fun getLibraryGroup(): Preference.PreferenceGroup {
         val scope = rememberCoroutineScope()
         val context = LocalContext.current
 
@@ -318,16 +315,6 @@ object SettingsAdvancedScreen : SearchableSettings {
                         }
                     },
                 ),
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = libraryPreferences.updateMangaTitles(),
-                    title = stringResource(MR.strings.pref_update_library_manga_titles),
-                    subtitle = stringResource(MR.strings.pref_update_library_manga_titles_summary),
-                ),
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = libraryPreferences.disallowNonAsciiFilenames(),
-                    title = stringResource(MR.strings.pref_disallow_non_ascii_filenames),
-                    subtitle = stringResource(MR.strings.pref_disallow_non_ascii_filenames_details),
-                ),
             ),
         )
     }
@@ -350,7 +337,13 @@ object SettingsAdvancedScreen : SearchableSettings {
             title = stringResource(MR.strings.pref_category_reader),
             preferenceItems = persistentListOf(
                 Preference.PreferenceItem.ListPreference(
-                    preference = basePreferences.hardwareBitmapThreshold(),
+                    pref = basePreferences.hardwareBitmapThreshold(),
+                    title = stringResource(MR.strings.pref_hardware_bitmap_threshold),
+                    subtitleProvider = { value, options ->
+                        stringResource(MR.strings.pref_hardware_bitmap_threshold_summary, options[value].orEmpty())
+                    },
+                    enabled = !ImageUtil.HARDWARE_BITMAP_UNSUPPORTED &&
+                        GLUtil.DEVICE_TEXTURE_LIMIT > GLUtil.SAFE_TEXTURE_LIMIT,
                     entries = GLUtil.CUSTOM_TEXTURE_LIMIT_OPTIONS
                         .mapIndexed { index, option ->
                             val display = if (index == 0) {
@@ -362,16 +355,10 @@ object SettingsAdvancedScreen : SearchableSettings {
                         }
                         .toMap()
                         .toImmutableMap(),
-                    title = stringResource(MR.strings.pref_hardware_bitmap_threshold),
-                    subtitleProvider = { value, options ->
-                        stringResource(MR.strings.pref_hardware_bitmap_threshold_summary, options[value].orEmpty())
-                    },
-                    enabled = !ImageUtil.HARDWARE_BITMAP_UNSUPPORTED &&
-                        GLUtil.DEVICE_TEXTURE_LIMIT > GLUtil.SAFE_TEXTURE_LIMIT,
                 ),
                 Preference.PreferenceItem.SwitchPreference(
-                    preference = basePreferences.alwaysDecodeLongStripWithSSIV(),
-                    title = stringResource(MR.strings.pref_always_decode_long_strip_with_ssiv_2),
+                    pref = basePreferences.alwaysDecodeLongStripWithSSIV(),
+                    title = stringResource(MR.strings.pref_always_decode_long_strip_with_ssiv),
                     subtitle = stringResource(MR.strings.pref_always_decode_long_strip_with_ssiv_summary),
                 ),
                 Preference.PreferenceItem.TextPreference(
@@ -394,7 +381,6 @@ object SettingsAdvancedScreen : SearchableSettings {
         val extensionInstallerPref = basePreferences.extensionInstaller()
         var shizukuMissing by rememberSaveable { mutableStateOf(false) }
         val trustExtension = remember { Injekt.get<TrustExtension>() }
-        val currentInstaller by extensionInstallerPref.collectAsState()
 
         if (shizukuMissing) {
             val dismiss = { shizukuMissing = false }
@@ -423,19 +409,19 @@ object SettingsAdvancedScreen : SearchableSettings {
             title = stringResource(MR.strings.label_extensions),
             preferenceItems = persistentListOf(
                 Preference.PreferenceItem.ListPreference(
-                    preference = extensionInstallerPref,
+                    pref = extensionInstallerPref,
+                    title = stringResource(MR.strings.ext_installer_pref),
                     entries = extensionInstallerPref.entries
                         .filter {
                             // TODO: allow private option in stable versions once URL handling is more fleshed out
-                            if (isReleaseBuildType) {
-                                it != BasePreferences.ExtensionInstaller.PRIVATE
-                            } else {
+                            if (isPreviewBuildType || isDevFlavor) {
                                 true
+                            } else {
+                                it != BasePreferences.ExtensionInstaller.PRIVATE
                             }
                         }
                         .associateWith { stringResource(it.titleRes) }
                         .toImmutableMap(),
-                    title = stringResource(MR.strings.ext_installer_pref),
                     onValueChanged = {
                         if (it == BasePreferences.ExtensionInstaller.SHIZUKU &&
                             !context.isShizukuInstalled
@@ -445,15 +431,6 @@ object SettingsAdvancedScreen : SearchableSettings {
                         } else {
                             true
                         }
-                    },
-                ),
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = basePreferences.shizukuReinstallOnFailure(),
-                    title = stringResource(MR.strings.pref_shizuku_reinstall_on_failure),
-                    subtitle = stringResource(MR.strings.pref_shizuku_reinstall_on_failure_summary),
-                    enabled = currentInstaller == BasePreferences.ExtensionInstaller.SHIZUKU,
-                    onValueChanged = {
-                        true
                     },
                 ),
                 Preference.PreferenceItem.TextPreference(

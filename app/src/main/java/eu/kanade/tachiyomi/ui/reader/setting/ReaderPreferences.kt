@@ -10,9 +10,9 @@ import tachiyomi.i18n.MR
 class ReaderPreferences(
     private val preferenceStore: PreferenceStore,
 ) {
-
     // region General
-    
+
+    // TachiyomiAT
     fun showTranslations() = preferenceStore.getBoolean("show_translations", true)
 
     fun pageTransitions() = preferenceStore.getBoolean("pref_enable_transitions_key", true)
@@ -33,9 +33,9 @@ class ReaderPreferences(
 
     fun fullscreen() = preferenceStore.getBoolean("fullscreen", true)
 
-    fun drawUnderCutout() = preferenceStore.getBoolean("cutout_short", true)
+    fun cutoutShort() = preferenceStore.getBoolean("cutout_short", true)
 
-    fun keepScreenOn() = preferenceStore.getBoolean("pref_keep_screen_on_key", false)
+    fun keepScreenOn() = preferenceStore.getBoolean("pref_keep_screen_on_key", true)
 
     fun defaultReadingMode() = preferenceStore.getInt(
         "pref_default_reading_mode_key",
@@ -116,18 +116,6 @@ class ReaderPreferences(
     fun grayscale() = preferenceStore.getBoolean("pref_grayscale", false)
 
     fun invertedColors() = preferenceStore.getBoolean("pref_inverted_colors", false)
-
-    fun stripFilter() = preferenceStore.getBoolean("strip_filter", false)
-
-    fun stripFilterColor() = preferenceStore.getInt("strip_filter_color", -0x1000000) // #FF000000 (black)
-
-    fun stripFilterWhiteThreshold() = preferenceStore.getInt("strip_filter_white_threshold", 230)
-
-    fun stripFilterGutterWidth() = preferenceStore.getInt("strip_filter_gutter_width", 90)
-
-    fun stripFilterTallMarginHeight() = preferenceStore.getInt("strip_filter_tall_margin_height", 30)
-
-    fun stripFilterBigChunkArea() = preferenceStore.getInt("strip_filter_big_chunk_area", 20)
 
     // endregion
 

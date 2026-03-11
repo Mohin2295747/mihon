@@ -1,9 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.webtoon
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.content.res.Resources
-import java.io.ByteArrayOutputStream
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
@@ -13,7 +10,6 @@ import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.updateMargins
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
-import eu.kanade.presentation.util.formattedMessage
 import eu.kanade.tachiyomi.databinding.ReaderErrorBinding
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
@@ -35,14 +31,12 @@ import kotlinx.coroutines.supervisorScope
 import logcat.LogPriority
 import okio.Buffer
 import okio.BufferedSource
-import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.ImageUtil
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.translation.TranslationPreferences
-import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -55,6 +49,8 @@ import uy.kohesive.injekt.api.get
  */
 class WebtoonPageHolder(
     private val frame: ReaderPageImageView,
+    viewer: WebtoonViewer,
+    // TachiyomiAT
     translationPreferences: TranslationPreferences = Injekt.get(),
     private val font: TranslationFont = TranslationFont.fromPref(translationPreferences.translationFont()),
     readerPreferences: ReaderPreferences = Injekt.get(),
@@ -102,9 +98,9 @@ class WebtoonPageHolder(
         refreshLayoutParams()
 
         frame.onImageLoaded = { onImageDecoded() }
-        frame.onImageLoadError = { error -> setError(error) }
+        frame.onImageLoadError = { setError() }
         frame.onScaleChanged = { viewer.activity.hideMenu() }
-        
+
         // TachiyomiAT
         showTranslations = readerPreferences.showTranslations().get()
         readerPreferences.showTranslations().changes().onEach {
@@ -168,21 +164,21 @@ class WebtoonPageHolder(
             }
             page.statusFlow.collectLatest { state ->
                 when (state) {
-                    Page.State.Queue -> setQueued()
-                    Page.State.LoadPage -> setLoading()
-                    Page.State.DownloadImage -> {
+                    Page.State.QUEUE -> setQueued()
+                    Page.State.LOAD_PAGE -> setLoading()
+                    Page.State.DOWNLOAD_IMAGE -> {
                         setDownloading()
                         page.progressFlow.collectLatest { value ->
                             progressIndicator.setProgress(value)
                         }
                     }
-                    
+
                     Page.State.READY -> {
                         setImage()
                         // TachiyomiAT
                         addTranslationsView()
                     }
-                    is Page.State.Error -> setError(state.error)
+                    Page.State.ERROR -> setError()
                 }
             }
         }
@@ -244,64 +240,25 @@ class WebtoonPageHolder(
         } catch (e: Throwable) {
             logcat(LogPriority.ERROR, e)
             withUIContext {
-                setError(e)
+                setError()
             }
         }
     }
 
     private fun process(imageSource: BufferedSource): BufferedSource {
-        var source = imageSource
-        if (viewer.config.stripFilter) {
-            source = applyStripFilter(source)
-        }
-
         if (viewer.config.dualPageRotateToFit) {
-            return rotateDualPage(source)
+            return rotateDualPage(imageSource)
         }
 
         if (viewer.config.dualPageSplit) {
-            val isDoublePage = ImageUtil.isWideImage(source)
+            val isDoublePage = ImageUtil.isWideImage(imageSource)
             if (isDoublePage) {
                 val upperSide = if (viewer.config.dualPageInvert) ImageUtil.Side.LEFT else ImageUtil.Side.RIGHT
-                return ImageUtil.splitAndMerge(source, upperSide)
+                return ImageUtil.splitAndMerge(imageSource, upperSide)
             }
         }
 
-        return source
-    }
-
-    private fun applyStripFilter(imageSource: BufferedSource): BufferedSource {
-        val bitmap = BitmapFactory.decodeStream(imageSource.inputStream()) ?: return imageSource
-
-        // Determine reading mode based on current viewer configuration
-        // This is evaluated at processing time in case user switches between reading modes, haven't found a better way to do this
-        val readingMode = detectReadingMode()
-
-        val filterConfig = StripFilter.Config(
-            whiteThreshold = viewer.config.stripFilterWhiteThreshold,
-            replacementColor = viewer.config.stripFilterColor,
-            gutterWidthPercentage = viewer.config.stripFilterGutterWidth / 100f,
-            tallMarginHeightPercentage = viewer.config.stripFilterTallMarginHeight / 100f,
-            bigChunkAreaPercentage = viewer.config.stripFilterBigChunkArea / 100f,
-            readingMode = readingMode,
-        )
-
-        val processedBitmap = StripFilter.process(bitmap, filterConfig)
-
-        val outputStream = ByteArrayOutputStream()
-        processedBitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
-        return Buffer().write(outputStream.toByteArray())
-    }
-
-    /**
-     * Detects the current reading mode
-     */
-    private fun detectReadingMode(): StripFilter.ReadingMode {
-        return if (viewer.config.dualPageSplit || viewer.config.dualPageRotateToFit) {
-            StripFilter.ReadingMode.MANGA_PAGED
-        } else {
-            StripFilter.ReadingMode.WEBTOON
-        }
+        return imageSource
     }
 
     private fun rotateDualPage(imageSource: BufferedSource): BufferedSource {
@@ -317,9 +274,10 @@ class WebtoonPageHolder(
     /**
      * Called when the page has an error.
      */
-    private fun setError(error: Throwable?) {
+    private fun setError() {
         progressContainer.isVisible = false
-        initErrorLayout(error)
+        initErrorLayout()
+        // TachiyomiAT
         translationsView?.hide()
     }
 
@@ -329,6 +287,7 @@ class WebtoonPageHolder(
     private fun onImageDecoded() {
         progressContainer.isVisible = false
         removeErrorLayout()
+        // TachiyomiAT
         translationsView?.show()
     }
 
@@ -424,7 +383,7 @@ class WebtoonPageHolder(
     /**
      * Initializes a button to retry pages.
      */
-    private fun initErrorLayout(error: Throwable?): ReaderErrorBinding {
+    private fun initErrorLayout(): ReaderErrorBinding {
         if (errorLayout == null) {
             errorLayout = ReaderErrorBinding.inflate(LayoutInflater.from(context), frame, true)
             errorLayout?.root?.layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, (parentHeight * 0.8).toInt())
@@ -438,16 +397,11 @@ class WebtoonPageHolder(
         if (imageUrl != null) {
             if (imageUrl.startsWith("http", true)) {
                 errorLayout?.actionOpenInWebView?.setOnClickListener {
-                    val sourceId = viewer.activity.viewModel.manga?.source
-
-                    val intent = WebViewActivity.newIntent(context, imageUrl, sourceId)
+                    val intent = WebViewActivity.newIntent(context, imageUrl)
                     context.startActivity(intent)
                 }
             }
         }
-
-        errorLayout?.errorMessage?.text = with(context) { error?.formattedMessage }
-            ?: context.stringResource(MR.strings.decode_image_error)
 
         return errorLayout!!
     }

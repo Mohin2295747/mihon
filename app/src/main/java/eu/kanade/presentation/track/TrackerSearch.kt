@@ -1,6 +1,5 @@
 package eu.kanade.presentation.track
 
-import android.content.ClipData
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -34,7 +33,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuItem
@@ -48,7 +46,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,11 +54,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.Clipboard
-import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.ClipboardManager
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.toClipEntry
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.capitalize
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.intl.Locale
@@ -75,7 +72,6 @@ import eu.kanade.presentation.manga.components.MangaCover
 import eu.kanade.presentation.theme.TachiyomiPreviewTheme
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.util.system.openInBrowser
-import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.ScrollbarLazyColumn
 import tachiyomi.presentation.core.components.material.Scaffold
@@ -94,9 +90,8 @@ fun TrackerSearch(
     queryResult: Result<List<TrackSearch>>?,
     selected: TrackSearch?,
     onSelectedChange: (TrackSearch) -> Unit,
-    onConfirmSelection: (private: Boolean) -> Unit,
+    onConfirmSelection: () -> Unit,
     onDismissRequest: () -> Unit,
-    supportsPrivateTracking: Boolean,
 ) {
     val focusManager = LocalFocusManager.current
     val focusRequester = remember { FocusRequester() }
@@ -169,31 +164,15 @@ fun TrackerSearch(
                 enter = fadeIn() + slideInVertically { it / 2 },
                 exit = slideOutVertically { it / 2 } + fadeOut(),
             ) {
-                Row(
+                Button(
+                    onClick = { onConfirmSelection() },
                     modifier = Modifier
-                        .padding(MaterialTheme.padding.small)
+                        .padding(12.dp)
                         .windowInsetsPadding(WindowInsets.navigationBars)
                         .fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+                    elevation = ButtonDefaults.elevatedButtonElevation(),
                 ) {
-                    Button(
-                        onClick = { onConfirmSelection(false) },
-                        modifier = Modifier.weight(1f),
-                        elevation = ButtonDefaults.elevatedButtonElevation(),
-                    ) {
-                        Text(text = stringResource(MR.strings.action_track))
-                    }
-                    if (supportsPrivateTracking) {
-                        Button(
-                            onClick = { onConfirmSelection(true) },
-                            elevation = ButtonDefaults.elevatedButtonElevation(),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.VisibilityOff,
-                                contentDescription = stringResource(MR.strings.action_toggle_private_on),
-                            )
-                        }
-                    }
+                    Text(text = stringResource(MR.strings.action_track))
                 }
             }
         },
@@ -243,7 +222,7 @@ private fun SearchResultItem(
     onClick: () -> Unit,
 ) {
     val context = LocalContext.current
-    val clipboard: Clipboard = LocalClipboard.current
+    val clipboardManager: ClipboardManager = LocalClipboardManager.current
     val focusManager = LocalFocusManager.current
     val type = trackSearch.publishing_type.toLowerCase(Locale.current).capitalize(Locale.current)
     val status = trackSearch.publishing_status.toLowerCase(Locale.current).capitalize(Locale.current)
@@ -251,7 +230,6 @@ private fun SearchResultItem(
     val shape = RoundedCornerShape(16.dp)
     val borderColor = if (selected) MaterialTheme.colorScheme.outline else Color.Transparent
     var dropDownMenuExpanded by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -299,13 +277,7 @@ private fun SearchResultItem(
                         expanded = dropDownMenuExpanded,
                         onCollapseMenu = { dropDownMenuExpanded = false },
                         onCopyName = {
-                            scope.launch {
-                                val clipEntry = ClipData.newPlainText(
-                                    trackSearch.title,
-                                    trackSearch.title,
-                                ).toClipEntry()
-                                clipboard.setClipEntry(clipEntry)
-                            }
+                            clipboardManager.setText(AnnotatedString(trackSearch.title))
                         },
                         onOpenInBrowser = {
                             val url = trackSearch.tracking_url
@@ -314,15 +286,6 @@ private fun SearchResultItem(
                             }
                         },
                     )
-                    if (trackSearch.authors.isNotEmpty() || trackSearch.artists.isNotEmpty()) {
-                        Text(
-                            text = (trackSearch.authors + trackSearch.artists).distinct().joinToString(),
-                            modifier = Modifier.secondaryItemAlpha(),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
                     if (type.isNotBlank()) {
                         SearchResultItemDetails(
                             title = stringResource(MR.strings.track_type),

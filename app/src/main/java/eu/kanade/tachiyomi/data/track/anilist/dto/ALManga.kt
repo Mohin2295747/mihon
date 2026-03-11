@@ -19,7 +19,6 @@ data class ALManga(
     val startDateFuzzy: Long,
     val totalChapters: Long,
     val averageScore: Int,
-    val staff: ALStaff,
 ) {
     fun toTrack() = TrackSearch.create(TrackerManager.ANILIST).apply {
         remote_id = remoteId
@@ -39,11 +38,6 @@ data class ALManga(
                 ""
             }
         }
-        staff.edges.forEach {
-            val name = it.node.name() ?: return@forEach
-            if ("Story" in it.role) authors += name
-            if ("Art" in it.role) artists += name
-        }
     }
 }
 
@@ -55,7 +49,6 @@ data class ALUserManga(
     val startDateFuzzy: Long,
     val completedDateFuzzy: Long,
     val manga: ALManga,
-    val private: Boolean,
 ) {
     fun toTrack() = Track.create(TrackerManager.ANILIST).apply {
         remote_id = manga.remoteId
@@ -67,7 +60,6 @@ data class ALUserManga(
         last_chapter_read = chaptersRead.toDouble()
         library_id = libraryId
         total_chapters = manga.totalChapters
-        private = this@ALUserManga.private
     }
 
     private fun toTrackStatus() = when (listStatus) {

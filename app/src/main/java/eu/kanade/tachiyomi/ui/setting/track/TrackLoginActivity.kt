@@ -2,64 +2,69 @@ package eu.kanade.tachiyomi.ui.setting.track
 
 import android.net.Uri
 import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.launch
+import tachiyomi.core.common.util.lang.launchIO
 
 class TrackLoginActivity : BaseOAuthLoginActivity() {
 
-    override fun handleResult(uri: Uri) {
-        val data = when {
-            !uri.encodedQuery.isNullOrBlank() -> uri.encodedQuery
-            !uri.encodedFragment.isNullOrBlank() -> uri.encodedFragment
-            else -> null
+    override fun handleResult(data: Uri?) {
+        when (data?.host) {
+            "anilist-auth" -> handleAnilist(data)
+            "bangumi-auth" -> handleBangumi(data)
+            "myanimelist-auth" -> handleMyAnimeList(data)
+            "shikimori-auth" -> handleShikimori(data)
         }
-            ?.split("&")
-            ?.filter { it.isNotBlank() }
-            ?.associate {
-                val parts = it.split("=", limit = 2).map<String, String>(Uri::decode)
-                parts[0] to parts.getOrNull(1)
-            }
-            .orEmpty()
+    }
 
-        lifecycleScope.launch {
-            when (uri.host) {
-                "anilist-auth" -> handleAniList(data["access_token"])
-                "bangumi-auth" -> handleBangumi(data["code"])
-                "myanimelist-auth" -> handleMyAnimeList(data["code"])
-                "shikimori-auth" -> handleShikimori(data["code"])
+    private fun handleAnilist(data: Uri) {
+        val regex = "(?:access_token=)(.*?)(?:&)".toRegex()
+        val matchResult = regex.find(data.fragment.toString())
+        if (matchResult?.groups?.get(1) != null) {
+            lifecycleScope.launchIO {
+                trackerManager.aniList.login(matchResult.groups[1]!!.value)
+                returnToSettings()
             }
+        } else {
+            trackerManager.aniList.logout()
             returnToSettings()
         }
     }
 
-    private suspend fun handleAniList(accessToken: String?) {
-        if (accessToken != null) {
-            trackerManager.aniList.login(accessToken)
-        } else {
-            trackerManager.aniList.logout()
-        }
-    }
-
-    private suspend fun handleBangumi(code: String?) {
+    private fun handleBangumi(data: Uri) {
+        val code = data.getQueryParameter("code")
         if (code != null) {
-            trackerManager.bangumi.login(code)
+            lifecycleScope.launchIO {
+                trackerManager.bangumi.login(code)
+                returnToSettings()
+            }
         } else {
             trackerManager.bangumi.logout()
+            returnToSettings()
         }
     }
 
-    private suspend fun handleMyAnimeList(code: String?) {
+    private fun handleMyAnimeList(data: Uri) {
+        val code = data.getQueryParameter("code")
         if (code != null) {
-            trackerManager.myAnimeList.login(code)
+            lifecycleScope.launchIO {
+                trackerManager.myAnimeList.login(code)
+                returnToSettings()
+            }
         } else {
             trackerManager.myAnimeList.logout()
+            returnToSettings()
         }
     }
 
-    private suspend fun handleShikimori(code: String?) {
+    private fun handleShikimori(data: Uri) {
+        val code = data.getQueryParameter("code")
         if (code != null) {
-            trackerManager.shikimori.login(code)
+            lifecycleScope.launchIO {
+                trackerManager.shikimori.login(code)
+                returnToSettings()
+            }
         } else {
             trackerManager.shikimori.logout()
+            returnToSettings()
         }
     }
 }

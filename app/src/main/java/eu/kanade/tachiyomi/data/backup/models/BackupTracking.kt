@@ -25,7 +25,6 @@ data class BackupTracking(
     @ProtoNumber(10) var startedReadingDate: Long = 0,
     // finishedReadingDate is called endReadTime in 1.x
     @ProtoNumber(11) var finishedReadingDate: Long = 0,
-    @ProtoNumber(12) var private: Boolean = false,
     @ProtoNumber(100) var mediaId: Long = 0,
 ) {
 
@@ -49,7 +48,6 @@ data class BackupTracking(
             startDate = this@BackupTracking.startedReadingDate,
             finishDate = this@BackupTracking.finishedReadingDate,
             remoteUrl = this@BackupTracking.trackingUrl,
-            private = this@BackupTracking.private,
         )
     }
 }
@@ -68,7 +66,6 @@ val backupTrackMapper = {
         remoteUrl: String,
         startDate: Long,
         finishDate: Long,
-        private: Boolean,
     ->
     BackupTracking(
         syncId = syncId.toInt(),
@@ -83,6 +80,5 @@ val backupTrackMapper = {
         startedReadingDate = startDate,
         finishedReadingDate = finishDate,
         trackingUrl = remoteUrl,
-        private = private,
     )
 }

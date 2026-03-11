@@ -24,7 +24,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import logcat.LogPriority
@@ -38,11 +37,8 @@ import tachiyomi.domain.source.service.SourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.concurrent.CopyOnWriteArrayList
-import kotlin.concurrent.atomics.AtomicInt
-import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.concurrent.atomics.fetchAndIncrement
+import java.util.concurrent.atomic.AtomicInteger
 
-@OptIn(ExperimentalAtomicApi::class)
 class MetadataUpdateJob(private val context: Context, workerParams: WorkerParameters) :
     CoroutineWorker(context, workerParams) {
 
@@ -56,8 +52,6 @@ class MetadataUpdateJob(private val context: Context, workerParams: WorkerParame
     private var mangaToUpdate: List<LibraryManga> = mutableListOf()
 
     override suspend fun doWork(): Result {
-        sourceManager.isInitialized.first { it }
-
         setForegroundSafely()
 
         addMangaToQueue()
@@ -103,7 +97,7 @@ class MetadataUpdateJob(private val context: Context, workerParams: WorkerParame
 
     private suspend fun updateMetadata() {
         val semaphore = Semaphore(5)
-        val progressCount = AtomicInt(0)
+        val progressCount = AtomicInteger(0)
         val currentlyUpdatingManga = CopyOnWriteArrayList<Manga>()
 
         coroutineScope {
@@ -148,7 +142,7 @@ class MetadataUpdateJob(private val context: Context, workerParams: WorkerParame
 
     private suspend fun withUpdateNotification(
         updatingManga: CopyOnWriteArrayList<Manga>,
-        completed: AtomicInt,
+        completed: AtomicInteger,
         manga: Manga,
         block: suspend () -> Unit,
     ) = coroutineScope {
@@ -157,7 +151,7 @@ class MetadataUpdateJob(private val context: Context, workerParams: WorkerParame
         updatingManga.add(manga)
         notifier.showProgressNotification(
             updatingManga,
-            completed.load(),
+            completed.get(),
             mangaToUpdate.size,
         )
 
@@ -166,10 +160,10 @@ class MetadataUpdateJob(private val context: Context, workerParams: WorkerParame
         ensureActive()
 
         updatingManga.remove(manga)
-        completed.fetchAndIncrement()
+        completed.getAndIncrement()
         notifier.showProgressNotification(
             updatingManga,
-            completed.load(),
+            completed.get(),
             mangaToUpdate.size,
         )
     }

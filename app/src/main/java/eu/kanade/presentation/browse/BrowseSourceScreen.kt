@@ -73,18 +73,10 @@ fun BrowseSourceContent(
         }
     }
 
-    if (mangaList.itemCount == 0 && mangaList.loadState.refresh is LoadState.Loading) {
-        LoadingScreen(Modifier.padding(contentPadding))
-        return
-    }
-
-    if (mangaList.itemCount == 0) {
+    if (mangaList.itemCount <= 0 && errorState != null && errorState is LoadState.Error) {
         EmptyScreen(
             modifier = Modifier.padding(contentPadding),
-            message = when (errorState) {
-                is LoadState.Error -> getErrorMessage(errorState)
-                else -> stringResource(MR.strings.no_results_found)
-            },
+            message = getErrorMessage(errorState),
             actions = if (source is LocalSource) {
                 persistentListOf(
                     EmptyScreenAction(
@@ -114,6 +106,13 @@ fun BrowseSourceContent(
             },
         )
 
+        return
+    }
+
+    if (mangaList.itemCount == 0 && mangaList.loadState.refresh is LoadState.Loading) {
+        LoadingScreen(
+            modifier = Modifier.padding(contentPadding),
+        )
         return
     }
 

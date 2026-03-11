@@ -32,7 +32,6 @@ fun MigrateSearchScreen(
                 navigateUp = navigateUp,
                 onChangeSearchQuery = onChangeSearchQuery,
                 onSearch = onSearch,
-                hideSourceFilter = true,
                 sourceFilter = state.sourceFilter,
                 onChangeSearchFilter = onChangeSearchFilter,
                 onlyShowHasResults = state.onlyShowHasResults,

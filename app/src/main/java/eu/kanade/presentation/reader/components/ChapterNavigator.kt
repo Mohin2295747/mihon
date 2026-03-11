@@ -1,9 +1,6 @@
 package eu.kanade.presentation.reader.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -16,13 +13,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.SkipNext
 import androidx.compose.material.icons.outlined.SkipPrevious
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButtonColors
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -35,11 +30,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -53,10 +46,8 @@ import tachiyomi.presentation.core.i18n.stringResource
 fun ChapterNavigator(
     isRtl: Boolean,
     onNextChapter: () -> Unit,
-    onNextChapterLongClick: () -> Unit,
     enabledNext: Boolean,
     onPreviousChapter: () -> Unit,
-    onPreviousChapterLongClick: () -> Unit,
     enabledPrevious: Boolean,
     currentPage: Int,
     totalPages: Int,
@@ -84,16 +75,18 @@ fun ChapterNavigator(
                 .padding(horizontal = horizontalPadding),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ChapterNavigationIconButton(
+            FilledIconButton(
                 enabled = if (isRtl) enabledNext else enabledPrevious,
                 onClick = if (isRtl) onNextChapter else onPreviousChapter,
-                onLongClick = if (isRtl) onNextChapterLongClick else onPreviousChapterLongClick,
                 colors = buttonColor,
-                icon = Icons.Outlined.SkipPrevious,
-                contentDescription = stringResource(
-                    if (isRtl) MR.strings.action_next_chapter else MR.strings.action_previous_chapter,
-                ),
-            )
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.SkipPrevious,
+                    contentDescription = stringResource(
+                        if (isRtl) MR.strings.action_next_chapter else MR.strings.action_previous_chapter,
+                    ),
+                )
+            }
 
             if (totalPages > 1) {
                 CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
@@ -138,55 +131,18 @@ fun ChapterNavigator(
                 Spacer(Modifier.weight(1f))
             }
 
-            ChapterNavigationIconButton(
+            FilledIconButton(
                 enabled = if (isRtl) enabledPrevious else enabledNext,
                 onClick = if (isRtl) onPreviousChapter else onNextChapter,
-                onLongClick = if (isRtl) onPreviousChapterLongClick else onNextChapterLongClick,
                 colors = buttonColor,
-                icon = Icons.Outlined.SkipNext,
-                contentDescription = stringResource(
-                    if (isRtl) MR.strings.action_previous_chapter else MR.strings.action_next_chapter,
-                ),
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun ChapterNavigationIconButton(
-    enabled: Boolean,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-    colors: IconButtonColors,
-    icon: ImageVector,
-    contentDescription: String,
-    modifier: Modifier = Modifier,
-) {
-    val haptic = LocalHapticFeedback.current
-
-    Surface(
-        modifier = modifier
-            .minimumInteractiveComponentSize()
-            .size(40.dp)
-            .combinedClickable(
-                enabled = enabled,
-                role = Role.Button,
-                onClick = onClick,
-                onLongClick = {
-                    onLongClick()
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                },
-            ),
-        shape = IconButtonDefaults.filledShape,
-        color = if (enabled) colors.containerColor else colors.disabledContainerColor,
-        contentColor = if (enabled) colors.contentColor else colors.disabledContentColor,
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-            )
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.SkipNext,
+                    contentDescription = stringResource(
+                        if (isRtl) MR.strings.action_previous_chapter else MR.strings.action_next_chapter,
+                    ),
+                )
+            }
         }
     }
 }
@@ -199,10 +155,8 @@ private fun ChapterNavigatorPreview() {
         ChapterNavigator(
             isRtl = false,
             onNextChapter = {},
-            onNextChapterLongClick = {},
             enabledNext = true,
             onPreviousChapter = {},
-            onPreviousChapterLongClick = {},
             enabledPrevious = true,
             currentPage = currentPage,
             totalPages = 10,

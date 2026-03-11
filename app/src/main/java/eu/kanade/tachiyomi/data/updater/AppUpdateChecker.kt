@@ -2,8 +2,7 @@ package eu.kanade.tachiyomi.data.updater
 
 import android.content.Context
 import eu.kanade.tachiyomi.BuildConfig
-import eu.kanade.tachiyomi.util.system.isFossBuildType
-import eu.kanade.tachiyomi.util.system.isPreviewBuildType
+import eu.kanade.tachiyomi.util.system.isInstalledFromFDroid
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.domain.release.interactor.GetApplicationRelease
 import uy.kohesive.injekt.injectLazy
@@ -21,8 +20,8 @@ class AppUpdateChecker {
         return withIOContext {
             val result = getApplicationRelease.await(
                 GetApplicationRelease.Arguments(
-                    isFossBuildType,
-                    isPreviewBuildType,
+                    BuildConfig.PREVIEW,
+                    context.isInstalledFromFDroid(),
                     BuildConfig.COMMIT_COUNT.toInt(),
                     BuildConfig.VERSION_NAME,
                     GITHUB_REPO,
@@ -32,6 +31,9 @@ class AppUpdateChecker {
 
             when (result) {
                 is GetApplicationRelease.Result.NewUpdate -> AppUpdateNotifier(context).promptUpdate(result.release)
+                is GetApplicationRelease.Result.ThirdPartyInstallation -> AppUpdateNotifier(
+                    context,
+                ).promptFdroidUpdate()
                 else -> {}
             }
 
@@ -41,15 +43,15 @@ class AppUpdateChecker {
 }
 
 val GITHUB_REPO: String by lazy {
-    if (isPreviewBuildType) {
-        "mihonapp/mihon-preview"
+    if (BuildConfig.PREVIEW) {
+        "mannu691/TachiyomiAT"
     } else {
-        "mihonapp/mihon"
+        "mannu691/TachiyomiAT"
     }
 }
 
 val RELEASE_TAG: String by lazy {
-    if (isPreviewBuildType) {
+    if (BuildConfig.PREVIEW) {
         "r${BuildConfig.COMMIT_COUNT}"
     } else {
         "v${BuildConfig.VERSION_NAME}"

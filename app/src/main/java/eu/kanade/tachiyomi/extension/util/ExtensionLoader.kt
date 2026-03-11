@@ -18,7 +18,6 @@ import eu.kanade.tachiyomi.util.storage.copyAndSetReadOnlyTo
 import eu.kanade.tachiyomi.util.system.ChildFirstPathClassLoader
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
@@ -111,36 +110,11 @@ internal object ExtensionLoader {
     }
 
     /**
-     * Polls the total number of extensions installed to wait for few consecutive passes
-     * so that the package manager has finished resolving the installed apps.
-     */
-    fun getExtensionCount(context: Context): Int {
-        val pkgManager = context.packageManager
-
-        val pollingFlags = PackageManager.GET_CONFIGURATIONS
-        val installedPkgs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            pkgManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(pollingFlags.toLong()))
-        } else {
-            @Suppress("DEPRECATION")
-            pkgManager.getInstalledPackages(pollingFlags)
-        }
-
-        val sharedCount = installedPkgs.count { isPackageAnExtension(it) }
-
-        val privateCount = getPrivateExtensionDir(context)
-            .listFiles()
-            ?.count { it.isFile && it.extension == PRIVATE_EXTENSION_EXTENSION }
-            ?: 0
-
-        return sharedCount + privateCount
-    }
-
-    /**
      * Return a list of all the available extensions initialized concurrently.
      *
      * @param context The application context.
      */
-    suspend fun loadExtensions(context: Context): List<LoadResult> {
+    fun loadExtensions(context: Context): List<LoadResult> {
         val pkgManager = context.packageManager
 
         val installedPkgs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -186,10 +160,11 @@ internal object ExtensionLoader {
         if (extPkgs.isEmpty()) return emptyList()
 
         // Load each extension concurrently and wait for completion
-        return coroutineScope {
-            extPkgs.map {
+        return runBlocking {
+            val deferred = extPkgs.map {
                 async { loadExtension(context, it) }
-            }.awaitAll()
+            }
+            deferred.awaitAll()
         }
     }
 
@@ -285,7 +260,6 @@ internal object ExtensionLoader {
                 versionCode,
                 libVersion,
                 signatures.last(),
-                installTime = pkgInfo.firstInstallTime,
             )
             logcat(LogPriority.WARN) { "Extension $pkgName isn't trusted" }
             return LoadResult.Untrusted(extension)
@@ -348,7 +322,6 @@ internal object ExtensionLoader {
             pkgFactory = appInfo.metaData.getString(METADATA_SOURCE_FACTORY),
             icon = appInfo.loadIcon(pkgManager),
             isShared = extensionInfo.isShared,
-            installTime = pkgInfo.firstInstallTime,
         )
         return LoadResult.Success(extension)
     }

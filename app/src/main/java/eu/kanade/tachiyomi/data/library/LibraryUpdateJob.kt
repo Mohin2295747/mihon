@@ -8,10 +8,12 @@ import android.os.Build
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
+import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkQuery
 import androidx.work.WorkerParameters
@@ -35,7 +37,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import logcat.LogPriority
@@ -67,19 +68,12 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
 import java.time.Instant
-import java.time.LocalDateTime
-import java.time.LocalTime
 import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
-import kotlin.concurrent.atomics.AtomicBoolean
-import kotlin.concurrent.atomics.AtomicInt
-import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.concurrent.atomics.incrementAndFetch
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
-@OptIn(ExperimentalAtomicApi::class)
 class LibraryUpdateJob(private val context: Context, workerParams: WorkerParameters) :
     CoroutineWorker(context, workerParams) {
 
@@ -99,8 +93,6 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
     private var mangaToUpdate: List<LibraryManga> = mutableListOf()
 
     override suspend fun doWork(): Result {
-        sourceManager.isInitialized.first { it }
-
         if (tags.contains(WORK_NAME_AUTO)) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
                 val preferences = Injekt.get<LibraryPreferences>()
@@ -123,7 +115,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         val categoryId = inputData.getLong(KEY_CATEGORY, -1L)
         addMangaToQueue(categoryId)
 
-        val result = withIOContext {
+        return withIOContext {
             try {
                 updateChapterList()
                 Result.success()
@@ -139,8 +131,6 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
                 notifier.cancelProgressNotification()
             }
         }
-        queueWorkRequestAtTime(context)
-        return result
     }
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
@@ -165,16 +155,25 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         val libraryManga = getLibraryManga.await()
 
         val listToUpdate = if (categoryId != -1L) {
-            libraryManga.filter { categoryId in it.categories }
+            libraryManga.filter { it.category == categoryId }
         } else {
-            val includedCategories = libraryPreferences.updateCategories().get().map { it.toLong() }
-            val excludedCategories = libraryPreferences.updateCategoriesExclude().get().map { it.toLong() }
-
-            libraryManga.filter {
-                val included = includedCategories.isEmpty() || it.categories.intersect(includedCategories).isNotEmpty()
-                val excluded = it.categories.intersect(excludedCategories).isNotEmpty()
-                included && !excluded
+            val categoriesToUpdate = libraryPreferences.updateCategories().get().map { it.toLong() }
+            val includedManga = if (categoriesToUpdate.isNotEmpty()) {
+                libraryManga.filter { it.category in categoriesToUpdate }
+            } else {
+                libraryManga
             }
+
+            val categoriesToExclude = libraryPreferences.updateCategoriesExclude().get().map { it.toLong() }
+            val excludedMangaIds = if (categoriesToExclude.isNotEmpty()) {
+                libraryManga.filter { it.category in categoriesToExclude }.map { it.manga.id }
+            } else {
+                emptyList()
+            }
+
+            includedManga
+                .filterNot { it.manga.id in excludedMangaIds }
+                .distinctBy { it.manga.id }
         }
 
         val restrictions = libraryPreferences.autoUpdateMangaRestrictions().get()
@@ -184,7 +183,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         mangaToUpdate = listToUpdate
             .filter {
                 when {
-                    it.manga.updateStrategy == UpdateStrategy.ONLY_FETCH_ONCE && it.totalChapters > 0L -> {
+                    it.manga.updateStrategy != UpdateStrategy.ALWAYS_UPDATE -> {
                         skippedUpdates.add(
                             it.manga to context.stringResource(MR.strings.skipped_reason_not_always_update),
                         )
@@ -241,7 +240,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
      */
     private suspend fun updateChapterList() {
         val semaphore = Semaphore(5)
-        val progressCount = AtomicInt(0)
+        val progressCount = AtomicInteger(0)
         val currentlyUpdatingManga = CopyOnWriteArrayList<Manga>()
         val newUpdates = CopyOnWriteArrayList<Pair<Manga, Array<Chapter>>>()
         val failedUpdates = CopyOnWriteArrayList<Pair<Manga, String?>>()
@@ -276,7 +275,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
 
                                             if (chaptersToDownload.isNotEmpty()) {
                                                 downloadChapters(manga, chaptersToDownload)
-                                                hasDownloads.store(true)
+                                                hasDownloads.set(true)
                                             }
 
                                             libraryPreferences.newUpdatesCount().getAndSet { it + newChapters.size }
@@ -309,7 +308,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
 
         if (newUpdates.isNotEmpty()) {
             notifier.showUpdateNotifications(newUpdates)
-            if (hasDownloads.load()) {
+            if (hasDownloads.get()) {
                 downloadManager.startDownloads()
             }
         }
@@ -355,7 +354,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
 
     private suspend fun withUpdateNotification(
         updatingManga: CopyOnWriteArrayList<Manga>,
-        completed: AtomicInt,
+        completed: AtomicInteger,
         manga: Manga,
         block: suspend () -> Unit,
     ) = coroutineScope {
@@ -364,7 +363,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         updatingManga.add(manga)
         notifier.showProgressNotification(
             updatingManga,
-            completed.load(),
+            completed.get(),
             mangaToUpdate.size,
         )
 
@@ -373,10 +372,10 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         ensureActive()
 
         updatingManga.remove(manga)
-        completed.incrementAndFetch()
+        completed.getAndIncrement()
         notifier.showProgressNotification(
             updatingManga,
-            completed.load(),
+            completed.get(),
             mangaToUpdate.size,
         )
     }
@@ -432,12 +431,47 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         fun setupTask(
             context: Context,
             prefInterval: Int? = null,
-            prefTime: String? = null
         ) {
             val preferences = Injekt.get<LibraryPreferences>()
             val interval = prefInterval ?: preferences.autoUpdateInterval().get()
             if (interval > 0) {
-                queueWorkRequestAtTime(context, prefTime, interval)
+                val restrictions = preferences.autoUpdateDeviceRestrictions().get()
+                val networkType = if (DEVICE_NETWORK_NOT_METERED in restrictions) {
+                    NetworkType.UNMETERED
+                } else {
+                    NetworkType.CONNECTED
+                }
+                val networkRequestBuilder = NetworkRequest.Builder()
+                if (DEVICE_ONLY_ON_WIFI in restrictions) {
+                    networkRequestBuilder.addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                }
+                if (DEVICE_NETWORK_NOT_METERED in restrictions) {
+                    networkRequestBuilder.addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+                }
+                val constraints = Constraints.Builder()
+                    // 'networkRequest' only applies to Android 9+, otherwise 'networkType' is used
+                    .setRequiredNetworkRequest(networkRequestBuilder.build(), networkType)
+                    .setRequiresCharging(DEVICE_CHARGING in restrictions)
+                    .setRequiresBatteryNotLow(true)
+                    .build()
+
+                val request = PeriodicWorkRequestBuilder<LibraryUpdateJob>(
+                    interval.toLong(),
+                    TimeUnit.HOURS,
+                    10,
+                    TimeUnit.MINUTES,
+                )
+                    .addTag(TAG)
+                    .addTag(WORK_NAME_AUTO)
+                    .setConstraints(constraints)
+                    .setBackoffCriteria(BackoffPolicy.LINEAR, 10, TimeUnit.MINUTES)
+                    .build()
+
+                context.workManager.enqueueUniquePeriodicWork(
+                    WORK_NAME_AUTO,
+                    ExistingPeriodicWorkPolicy.UPDATE,
+                    request,
+                )
             } else {
                 context.workManager.cancelUniqueWork(WORK_NAME_AUTO)
             }
@@ -481,74 +515,6 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
                         setupTask(context)
                     }
                 }
-        }
-        private fun buildConstraints(preferences : LibraryPreferences) : Constraints
-        {
-            val restrictions = preferences.autoUpdateDeviceRestrictions().get()
-            val networkType = if (DEVICE_NETWORK_NOT_METERED in restrictions) {
-                NetworkType.UNMETERED
-            } else {
-                NetworkType.CONNECTED
-            }
-            val networkRequestBuilder = NetworkRequest.Builder()
-            if (DEVICE_ONLY_ON_WIFI in restrictions) {
-                networkRequestBuilder.addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-            }
-            if (DEVICE_NETWORK_NOT_METERED in restrictions) {
-                networkRequestBuilder.addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
-            }
-            return Constraints.Builder()
-            // 'networkRequest' only applies to Android 9+, otherwise 'networkType' is used
-            .setRequiredNetworkRequest(networkRequestBuilder.build(), networkType)
-            .setRequiresCharging(DEVICE_CHARGING in restrictions)
-            .setRequiresBatteryNotLow(true)
-            .build()
-        }
-
-        private fun queueWorkRequestAtTime(
-            context : Context,
-            timePref : String? = null,
-            intervalPref : Int? = null)
-        {
-            val preferences = Injekt.get<LibraryPreferences>()
-
-            val time = timePref ?: preferences.autoUpdateTime().get()
-            val interval = intervalPref ?: preferences.autoUpdateInterval().get()
-
-            val constraints = buildConstraints(preferences)
-
-            // Convert time string into LocalTime obj
-            val format = DateTimeFormatter.ofPattern("h:mm a")
-            val updateTime = LocalTime.parse(time, format)
-
-            // Create LocalDateTime obj with today's date and the time set to the update time
-            var updateCal = LocalDateTime.now()
-            updateCal = updateCal.withHour(updateTime.hour).withMinute(updateTime.minute)
-
-            // Check if update time has already passed, if so: schedule for tomorrow
-            val now = LocalDateTime.now()
-            if (ChronoUnit.MINUTES.between(now,updateCal) <= 0)
-                updateCal = updateCal.plusHours(interval.toLong())
-
-            // Get number of minutes until update
-            val delay = ChronoUnit.MINUTES.between(now,updateCal) + 1
-
-
-            // Create one time request
-            val request = OneTimeWorkRequestBuilder<LibraryUpdateJob>()
-                .setInitialDelay(delay, TimeUnit.MINUTES)
-                .addTag(TAG)
-                .addTag(WORK_NAME_AUTO)
-                .setConstraints(constraints)
-                .setBackoffCriteria(BackoffPolicy.LINEAR, 10, TimeUnit.MINUTES)
-                .build()
-
-            // Enqueue request
-            context.workManager.enqueueUniqueWork(
-                WORK_NAME_AUTO,
-                ExistingWorkPolicy.REPLACE,
-                request,
-            )
         }
     }
 }

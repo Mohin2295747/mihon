@@ -104,10 +104,10 @@ class DownloadManager(
         return queueState.value.find { it.chapter.id == chapterId }
     }
 
-    suspend fun startDownloadNow(chapterId: Long) {
+    fun startDownloadNow(chapterId: Long) {
         val existingDownload = getQueuedDownloadOrNull(chapterId)
         // If not in queue try to start a new download
-        val toAdd = existingDownload ?: Download.fromChapterId(chapterId) ?: return
+        val toAdd = existingDownload ?: runBlocking { Download.fromChapterId(chapterId) } ?: return
         queueState.value.toMutableList().apply {
             existingDownload?.let { remove(it) }
             add(0, toAdd)
@@ -159,7 +159,7 @@ class DownloadManager(
      * @return the list of pages from the chapter.
      */
     fun buildPageList(source: Source, manga: Manga, chapter: Chapter): List<Pair<String, Page>> {
-        val chapterDir = provider.findChapterDir(chapter.name, chapter.scanlator, chapter.url, manga.title, source)
+        val chapterDir = provider.findChapterDir(chapter.name, chapter.scanlator, manga.title, source)
         val files = chapterDir?.listFiles().orEmpty()
             .filter { it.isFile && ImageUtil.isImage(it.name) { it.openInputStream() } }
 
@@ -169,7 +169,7 @@ class DownloadManager(
 
         return files.sortedBy { it.name }
             .mapIndexed { i, file ->
-                Pair(file.name!!, Page(i, uri = file.uri).apply { status = Page.State.Ready })
+                Pair(file.name!!, Page(i, uri = file.uri).apply { status = Page.State.READY })
             }
     }
 
@@ -185,12 +185,11 @@ class DownloadManager(
     fun isChapterDownloaded(
         chapterName: String,
         chapterScanlator: String?,
-        chapterUrl: String,
         mangaTitle: String,
         sourceId: Long,
         skipCache: Boolean = false,
     ): Boolean {
-        return cache.isChapterDownloaded(chapterName, chapterScanlator, chapterUrl, mangaTitle, sourceId, skipCache)
+        return cache.isChapterDownloaded(chapterName, chapterScanlator, mangaTitle, sourceId, skipCache)
     }
 
     /**
@@ -329,38 +328,6 @@ class DownloadManager(
     }
 
     /**
-     * Renames manga download folder
-     *
-     * @param manga the manga
-     * @param newTitle the new manga title.
-     */
-    suspend fun renameManga(manga: Manga, newTitle: String) {
-        val source = sourceManager.getOrStub(manga.source)
-        val oldFolder = provider.findMangaDir(manga.title, source) ?: return
-        val newName = provider.getMangaDirName(newTitle)
-
-        if (oldFolder.name == newName) return
-
-        // just to be safe, don't allow downloads for this manga while renaming it
-        downloader.removeFromQueue(manga)
-
-        val capitalizationChanged = oldFolder.name.equals(newName, ignoreCase = true)
-        if (capitalizationChanged) {
-            val tempName = newName + Downloader.TMP_DIR_SUFFIX
-            if (!oldFolder.renameTo(tempName)) {
-                logcat(LogPriority.ERROR) { "Failed to rename manga download folder: ${oldFolder.name}" }
-                return
-            }
-        }
-
-        if (oldFolder.renameTo(newName)) {
-            cache.renameManga(manga, oldFolder, newTitle)
-        } else {
-            logcat(LogPriority.ERROR) { "Failed to rename manga download folder: ${oldFolder.name}" }
-        }
-    }
-
-    /**
      * Renames an already downloaded chapter
      *
      * @param source the source of the manga.
@@ -369,18 +336,15 @@ class DownloadManager(
      * @param newChapter the target chapter with the new name.
      */
     suspend fun renameChapter(source: Source, manga: Manga, oldChapter: Chapter, newChapter: Chapter) {
-        val oldNames = provider.getValidChapterDirNames(oldChapter.name, oldChapter.scanlator, oldChapter.url)
-        val mangaDir = provider.getMangaDir(manga.title, source).getOrElse { e ->
-            logcat(LogPriority.ERROR, e) { "Manga download folder doesn't exist. Skipping renaming after source sync" }
-            return
-        }
+        val oldNames = provider.getValidChapterDirNames(oldChapter.name, oldChapter.scanlator)
+        val mangaDir = provider.getMangaDir(manga.title, source)
 
         // Assume there's only 1 version of the chapter name formats present
         val oldDownload = oldNames.asSequence()
             .mapNotNull { mangaDir.findFile(it) }
             .firstOrNull() ?: return
 
-        var newName = provider.getChapterDirName(newChapter.name, newChapter.scanlator, newChapter.url)
+        var newName = provider.getChapterDirName(newChapter.name, newChapter.scanlator)
         if (oldDownload.isFile && oldDownload.extension == "cbz") {
             newName += ".cbz"
         }

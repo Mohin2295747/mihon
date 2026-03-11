@@ -54,7 +54,6 @@ import eu.kanade.tachiyomi.data.track.Tracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.util.lang.convertEpochMillisZone
-import eu.kanade.tachiyomi.util.lang.toLocalDate
 import eu.kanade.tachiyomi.util.system.copyToClipboard
 import eu.kanade.tachiyomi.util.system.openInBrowser
 import eu.kanade.tachiyomi.util.system.toast
@@ -85,6 +84,7 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.ZoneOffset
 
 data class TrackInfoDialogHomeScreen(
@@ -172,7 +172,6 @@ data class TrackInfoDialogHomeScreen(
                 )
             },
             onCopyLink = { context.copyTrackerLink(it) },
-            onTogglePrivate = screenModel::togglePrivate,
         )
     }
 
@@ -220,7 +219,7 @@ data class TrackInfoDialogHomeScreen(
                 try {
                     val matchResult = item.tracker.match(manga) ?: throw Exception()
                     item.tracker.register(matchResult, mangaId)
-                } catch (_: Exception) {
+                } catch (e: Exception) {
                     withUIContext { Injekt.get<Application>().toast(MR.strings.error_no_match) }
                 }
             }
@@ -246,12 +245,6 @@ data class TrackInfoDialogHomeScreen(
                         )
                     }
                 }
-        }
-
-        fun togglePrivate(item: TrackItem) {
-            screenModelScope.launchNonCancellable {
-                item.tracker.setRemotePrivate(item.track!!.toDbTrack(), !item.track.private)
-            }
         }
 
         private fun List<Track>.mapToTrackItem(): List<TrackItem> {
@@ -446,46 +439,56 @@ private data class TrackDateSelectorScreen(
     @Transient
     private val selectableDates = object : SelectableDates {
         override fun isSelectableDate(utcTimeMillis: Long): Boolean {
-            val targetDate = Instant.ofEpochMilli(utcTimeMillis).toLocalDate(ZoneOffset.UTC)
+            val dateToCheck = Instant.ofEpochMilli(utcTimeMillis)
+                .atZone(ZoneOffset.systemDefault())
+                .toLocalDate()
 
-            // Disallow future dates
-            if (targetDate > LocalDate.now(ZoneOffset.UTC)) return false
+            if (dateToCheck > LocalDate.now()) {
+                // Disallow future dates
+                return false
+            }
 
-            return when {
-                // Disallow setting start date after finish date
-                start && track.finishDate > 0 -> {
-                    val finishDate = Instant.ofEpochMilli(track.finishDate).toLocalDate(ZoneOffset.UTC)
-                    targetDate <= finishDate
-                }
-                // Disallow setting finish date before start date
-                !start && track.startDate > 0 -> {
-                    val startDate = Instant.ofEpochMilli(track.startDate).toLocalDate(ZoneOffset.UTC)
-                    startDate <= targetDate
-                }
-                else -> {
-                    true
-                }
+            return if (start && track.finishDate > 0) {
+                // Disallow start date to be set later than finish date
+                val dateFinished = Instant.ofEpochMilli(track.finishDate)
+                    .atZone(ZoneId.systemDefault())
+                    .toLocalDate()
+                dateToCheck <= dateFinished
+            } else if (!start && track.startDate > 0) {
+                // Disallow end date to be set earlier than start date
+                val dateStarted = Instant.ofEpochMilli(track.startDate)
+                    .atZone(ZoneId.systemDefault())
+                    .toLocalDate()
+                dateToCheck >= dateStarted
+            } else {
+                // Nothing set before
+                true
             }
         }
 
         override fun isSelectableYear(year: Int): Boolean {
-            // Disallow future years
-            if (year > LocalDate.now(ZoneOffset.UTC).year) return false
+            if (year > LocalDate.now().year) {
+                // Disallow future dates
+                return false
+            }
 
-            return when {
-                // Disallow setting start year after finish year
-                start && track.finishDate > 0 -> {
-                    val finishDate = Instant.ofEpochMilli(track.finishDate).toLocalDate(ZoneOffset.UTC)
-                    year <= finishDate.year
-                }
-                // Disallow setting finish year before start year
-                !start && track.startDate > 0 -> {
-                    val startDate = Instant.ofEpochMilli(track.startDate).toLocalDate(ZoneOffset.UTC)
-                    startDate.year <= year
-                }
-                else -> {
-                    true
-                }
+            return if (start && track.finishDate > 0) {
+                // Disallow start date to be set later than finish date
+                val dateFinished = Instant.ofEpochMilli(track.finishDate)
+                    .atZone(ZoneId.systemDefault())
+                    .toLocalDate()
+                    .year
+                year <= dateFinished
+            } else if (!start && track.startDate > 0) {
+                // Disallow end date to be set earlier than start date
+                val dateStarted = Instant.ofEpochMilli(track.startDate)
+                    .atZone(ZoneId.systemDefault())
+                    .toLocalDate()
+                    .year
+                year >= dateStarted
+            } else {
+                // Nothing set before
+                true
             }
         }
     }
@@ -670,14 +673,11 @@ data class TrackerSearchScreen(
             queryResult = state.queryResult,
             selected = state.selected,
             onSelectedChange = screenModel::updateSelection,
-            onConfirmSelection = f@{ private: Boolean ->
-                val selected = state.selected ?: return@f
-                selected.private = private
-                screenModel.registerTracking(selected)
+            onConfirmSelection = {
+                screenModel.registerTracking(state.selected!!)
                 navigator.pop()
             },
             onDismissRequest = navigator::pop,
-            supportsPrivateTracking = screenModel.supportsPrivateTracking,
         )
     }
 
@@ -687,8 +687,6 @@ data class TrackerSearchScreen(
         initialQuery: String,
         private val tracker: Tracker,
     ) : StateScreenModel<Model.State>(State()) {
-
-        val supportsPrivateTracking = tracker.supportsPrivateTracking
 
         init {
             // Run search on first launch

@@ -19,7 +19,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import eu.kanade.tachiyomi.util.system.isReleaseBuildType
+import eu.kanade.tachiyomi.util.system.isDevFlavor
+import eu.kanade.tachiyomi.util.system.isPreviewBuildType
 import kotlinx.collections.immutable.toImmutableList
 import tachiyomi.domain.manga.interactor.FetchInterval
 import tachiyomi.i18n.MR
@@ -108,7 +109,7 @@ fun SetIntervalDialog(
                 }
                 Spacer(Modifier.height(MaterialTheme.padding.small))
 
-                if (onValueChanged != null && (!isReleaseBuildType)) {
+                if (onValueChanged != null && (isDevFlavor || isPreviewBuildType)) {
                     Text(stringResource(MR.strings.manga_interval_custom_amount))
 
                     BoxWithConstraints(

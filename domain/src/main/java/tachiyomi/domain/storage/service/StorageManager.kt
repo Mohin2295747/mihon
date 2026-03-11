@@ -37,6 +37,7 @@ class StorageManager(
                 baseDir?.let { parent ->
                     parent.createDirectory(AUTOMATIC_BACKUPS_PATH)
                     parent.createDirectory(LOCAL_SOURCE_PATH)
+                    // TachiyomiAT
                     parent.createDirectory(TRANSLATION_PATH)
                     parent.createDirectory(DOWNLOADS_PATH).also {
                         DiskUtil.createNoMediaFile(it, context)
@@ -63,7 +64,8 @@ class StorageManager(
     fun getLocalSourceDirectory(): UniFile? {
         return baseDir?.createDirectory(LOCAL_SOURCE_PATH)
     }
-    
+
+    // TachiyomiAT
     fun getTranslationsDirectory(): UniFile? {
         return baseDir?.createDirectory(TRANSLATION_PATH)
     }
@@ -72,4 +74,6 @@ class StorageManager(
 private const val AUTOMATIC_BACKUPS_PATH = "autobackup"
 private const val DOWNLOADS_PATH = "downloads"
 private const val LOCAL_SOURCE_PATH = "local"
+
+// TachiyomiAT
 private const val TRANSLATION_PATH = "translations"

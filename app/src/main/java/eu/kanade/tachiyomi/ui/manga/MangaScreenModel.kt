@@ -24,7 +24,6 @@ import eu.kanade.domain.manga.model.chaptersFiltered
 import eu.kanade.domain.manga.model.downloadedFilter
 import eu.kanade.domain.manga.model.toSManga
 import eu.kanade.domain.track.interactor.AddTracks
-import eu.kanade.domain.track.interactor.RefreshTracks
 import eu.kanade.domain.track.interactor.TrackChapter
 import eu.kanade.domain.track.model.AutoTrackState
 import eu.kanade.domain.track.service.TrackPreferences
@@ -54,7 +53,6 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -84,7 +82,6 @@ import tachiyomi.domain.manga.interactor.GetDuplicateLibraryManga
 import tachiyomi.domain.manga.interactor.GetMangaWithChapters
 import tachiyomi.domain.manga.interactor.SetMangaChapterFlags
 import tachiyomi.domain.manga.model.Manga
-import tachiyomi.domain.manga.model.MangaWithChapterCount
 import tachiyomi.domain.manga.model.applyFilter
 import tachiyomi.domain.manga.repository.MangaRepository
 import tachiyomi.domain.source.service.SourceManager
@@ -106,6 +103,7 @@ class MangaScreenModel(
     private val trackerManager: TrackerManager = Injekt.get(),
     private val trackChapter: TrackChapter = Injekt.get(),
     private val downloadManager: DownloadManager = Injekt.get(),
+    // TachiyomiAT
     private val translationManager: TranslationManager = Injekt.get(),
     private val downloadCache: DownloadCache = Injekt.get(),
     private val getMangaAndChapters: GetMangaWithChapters = Injekt.get(),
@@ -125,7 +123,6 @@ class MangaScreenModel(
     private val setMangaCategories: SetMangaCategories = Injekt.get(),
     private val mangaRepository: MangaRepository = Injekt.get(),
     private val filterChaptersForDownload: FilterChaptersForDownload = Injekt.get(),
-    private val sourceManager: SourceManager = Injekt.get(),
     val snackbarHostState: SnackbarHostState = SnackbarHostState(),
 ) : StateScreenModel<MangaScreenModel.State>(State.Loading) {
 
@@ -177,6 +174,7 @@ class MangaScreenModel(
                 getMangaAndChapters.subscribe(mangaId, applyScanlatorFilter = true).distinctUntilChanged(),
                 downloadCache.changes,
                 downloadManager.queueState,
+                // TachiyomiAT
                 translationManager.queueState,
             ) { mangaAndChapters, _, _, _ -> mangaAndChapters }
                 .flowWithLifecycle(lifecycle)
@@ -213,6 +211,7 @@ class MangaScreenModel(
         }
 
         observeDownloads()
+        // TachiyomiAT
         observeTranslations()
 
         screenModelScope.launchIO {
@@ -227,20 +226,17 @@ class MangaScreenModel(
             val needRefreshInfo = !manga.initialized
             val needRefreshChapter = chapters.isEmpty()
 
-            sourceManager.isInitialized.first { it }
-
             // Show what we have earlier
             mutableState.update {
                 State.Success(
                     manga = manga,
-                    source = sourceManager.getOrStub(manga.source),
+                    source = Injekt.get<SourceManager>().getOrStub(manga.source),
                     isFromSource = isFromSource,
                     chapters = chapters,
                     availableScanlators = getAvailableScanlators.await(mangaId),
                     excludedScanlators = getExcludedScanlators.await(mangaId),
                     isRefreshingData = needRefreshInfo || needRefreshChapter,
                     dialog = null,
-                    hideMissingChapters = libraryPreferences.hideMissingChapters().get(),
                 )
             }
 
@@ -338,10 +334,10 @@ class MangaScreenModel(
                 // Add to library
                 // First, check if duplicate exists if callback is provided
                 if (checkDuplicate) {
-                    val duplicates = getDuplicateLibraryManga(manga)
+                    val duplicate = getDuplicateLibraryManga.await(manga).getOrNull(0)
 
-                    if (duplicates.isNotEmpty()) {
-                        updateSuccessState { it.copy(dialog = Dialog.DuplicateManga(manga, duplicates)) }
+                    if (duplicate != null) {
+                        updateSuccessState { it.copy(dialog = Dialog.DuplicateManga(manga, duplicate)) }
                         return@launchIO
                     }
                 }
@@ -511,7 +507,8 @@ class MangaScreenModel(
                 }
         }
     }
-    
+
+    // TachiyomiAT
     private fun observeTranslations() {
         screenModelScope.launchIO {
             translationManager.statusFlow()
@@ -526,6 +523,7 @@ class MangaScreenModel(
         }
     }
 
+    // TachiyomiAT
     private fun updateTranslationState(translation: Translation) {
         updateSuccessState { successState ->
             val modifiedIndex = successState.chapters.indexOfFirst { it.id == translation.chapter.id }
@@ -539,7 +537,6 @@ class MangaScreenModel(
             successState.copy(chapters = newChapters)
         }
     }
-    
 
     private fun updateDownloadState(download: Download) {
         updateSuccessState { successState ->
@@ -566,19 +563,14 @@ class MangaScreenModel(
             val downloaded = if (isLocal) {
                 true
             } else {
-                downloadManager.isChapterDownloaded(
-                    chapter.name,
-                    chapter.scanlator,
-                    chapter.url,
-                    manga.title,
-                    manga.source,
-                )
+                downloadManager.isChapterDownloaded(chapter.name, chapter.scanlator, manga.title, manga.source)
             }
             val downloadState = when {
                 activeDownload != null -> activeDownload.status
                 downloaded -> Download.State.DOWNLOADED
                 else -> Download.State.NOT_DOWNLOADED
             }
+            // TachiyomiAT
             var translationState = Translation.State.NOT_TRANSLATED
             if (downloadState == Download.State.DOWNLOADED) {
                 translationState = translationManager.getChapterTranslationStatus(
@@ -595,6 +587,7 @@ class MangaScreenModel(
                 downloadState = downloadState,
                 downloadProgress = activeDownload?.progress ?: 0,
                 selected = chapter.id in selectedChapterIds,
+                // TachiyomiAT
                 translationState = translationState,
             )
         }
@@ -657,17 +650,21 @@ class MangaScreenModel(
             LibraryPreferences.ChapterSwipeAction.ToggleRead -> {
                 markChaptersRead(listOf(chapter), !chapter.read)
             }
+
             LibraryPreferences.ChapterSwipeAction.ToggleBookmark -> {
                 bookmarkChapters(listOf(chapter), !chapter.bookmark)
             }
+
             LibraryPreferences.ChapterSwipeAction.Download -> {
                 val downloadAction: ChapterDownloadAction = when (chapterItem.downloadState) {
                     Download.State.ERROR,
                     Download.State.NOT_DOWNLOADED,
                     -> ChapterDownloadAction.START_NOW
+
                     Download.State.QUEUE,
                     Download.State.DOWNLOADING,
                     -> ChapterDownloadAction.CANCEL
+
                     Download.State.DOWNLOADED -> ChapterDownloadAction.DELETE
                 }
                 runChapterDownloadActions(
@@ -675,6 +672,7 @@ class MangaScreenModel(
                     action = downloadAction,
                 )
             }
+
             LibraryPreferences.ChapterSwipeAction.Disabled -> throw IllegalStateException()
         }
     }
@@ -698,13 +696,6 @@ class MangaScreenModel(
         val manga = successState?.manga ?: return emptyList()
         val chaptersSorted = getUnreadChapters().sortedWith(getChapterSort(manga))
         return if (manga.sortDescending()) chaptersSorted.reversed() else chaptersSorted
-    }
-
-    private fun getBookmarkedChapters(): List<Chapter> {
-        val chapterItems = if (skipFiltered) filteredChapters.orEmpty() else allChapters.orEmpty()
-        return chapterItems
-            .filter { (chapter, dlStatus) -> chapter.bookmark && dlStatus == Download.State.NOT_DOWNLOADED }
-            .map { it.chapter }
     }
 
     private fun startDownload(
@@ -736,7 +727,8 @@ class MangaScreenModel(
             }
         }
     }
-    
+
+    // TachiyomiAT
     fun runChapterTranslationActions(
         item: ChapterList.Item,
         action: ChapterTranslationAction,
@@ -796,14 +788,17 @@ class MangaScreenModel(
                     downloadManager.startDownloads()
                 }
             }
+
             ChapterDownloadAction.START_NOW -> {
                 val chapter = items.singleOrNull()?.chapter ?: return
                 startDownload(listOf(chapter), true)
             }
+
             ChapterDownloadAction.CANCEL -> {
                 val chapterId = items.singleOrNull()?.id ?: return
                 cancelDownload(chapterId)
             }
+
             ChapterDownloadAction.DELETE -> {
                 deleteChapters(items.map { it.chapter })
             }
@@ -817,7 +812,6 @@ class MangaScreenModel(
             DownloadAction.NEXT_10_CHAPTERS -> getUnreadChaptersSorted().take(10)
             DownloadAction.NEXT_25_CHAPTERS -> getUnreadChaptersSorted().take(25)
             DownloadAction.UNREAD_CHAPTERS -> getUnreadChapters()
-            DownloadAction.BOOKMARKED_CHAPTERS -> getBookmarkedChapters()
         }
         if (chaptersToDownload.isNotEmpty()) {
             startDownload(chaptersToDownload, false)
@@ -856,8 +850,6 @@ class MangaScreenModel(
                 return@launchIO
             }
 
-            refreshTrackers()
-
             val tracks = getTracks.await(mangaId)
             val maxChapterNumber = chapters.maxOf { it.chapterNumber }
             val shouldPromptTrackingUpdate = tracks.any { track -> maxChapterNumber > track.lastChapterRead }
@@ -882,27 +874,6 @@ class MangaScreenModel(
                 trackChapter.await(context, mangaId, maxChapterNumber)
             }
         }
-    }
-
-    private suspend fun refreshTrackers(
-        refreshTracks: RefreshTracks = Injekt.get(),
-    ) {
-        refreshTracks.await(mangaId)
-            .filter { it.first != null }
-            .forEach { (track, e) ->
-                logcat(LogPriority.ERROR, e) {
-                    "Failed to refresh track data mangaId=$mangaId for service ${track!!.id}"
-                }
-                withUIContext {
-                    context.toast(
-                        context.stringResource(
-                            MR.strings.track_error,
-                            track!!.name,
-                            e.message ?: "",
-                        ),
-                    )
-                }
-            }
     }
 
     /**
@@ -1059,6 +1030,7 @@ class MangaScreenModel(
     fun toggleSelection(
         item: ChapterList.Item,
         selected: Boolean,
+        userSelected: Boolean = false,
         fromLongPress: Boolean = false,
     ) {
         updateSuccessState { successState ->
@@ -1073,7 +1045,7 @@ class MangaScreenModel(
                 set(selectedIndex, selectedItem.copy(selected = selected))
                 selectedChapterIds.addOrRemove(item.id, selected)
 
-                if (selected && fromLongPress) {
+                if (selected && userSelected && fromLongPress) {
                     if (firstSelection) {
                         selectedPositions[0] = selectedIndex
                         selectedPositions[1] = selectedIndex
@@ -1099,7 +1071,7 @@ class MangaScreenModel(
                             }
                         }
                     }
-                } else if (!fromLongPress) {
+                } else if (userSelected && !fromLongPress) {
                     if (!selected) {
                         if (selectedIndex == selectedPositions[0]) {
                             selectedPositions[0] = indexOfFirst { it.selected }
@@ -1181,9 +1153,10 @@ class MangaScreenModel(
             val manga: Manga,
             val initialSelection: ImmutableList<CheckboxState<Category>>,
         ) : Dialog
+
         data class DeleteChapters(val chapters: List<Chapter>) : Dialog
-        data class DuplicateManga(val manga: Manga, val duplicates: List<MangaWithChapterCount>) : Dialog
-        data class Migrate(val target: Manga, val current: Manga) : Dialog
+        data class DuplicateManga(val manga: Manga, val duplicate: Manga) : Dialog
+        data class Migrate(val newManga: Manga, val oldManga: Manga) : Dialog
         data class SetFetchInterval(val manga: Manga) : Dialog
         data object SettingsSheet : Dialog
         data object TrackSheet : Dialog
@@ -1212,7 +1185,7 @@ class MangaScreenModel(
 
     fun showMigrateDialog(duplicate: Manga) {
         val manga = successState?.manga ?: return
-        updateSuccessState { it.copy(dialog = Dialog.Migrate(target = manga, current = duplicate)) }
+        updateSuccessState { it.copy(dialog = Dialog.Migrate(newManga = manga, oldManga = duplicate)) }
     }
 
     fun setExcludedScanlators(excludedScanlators: Set<String>) {
@@ -1238,7 +1211,6 @@ class MangaScreenModel(
             val isRefreshingData: Boolean = false,
             val dialog: Dialog? = null,
             val hasPromptedToAddBefore: Boolean = false,
-            val hideMissingChapters: Boolean = false,
         ) : State {
             val processedChapters by lazy {
                 chapters.applyFilters(manga).toList()
@@ -1249,10 +1221,6 @@ class MangaScreenModel(
             }
 
             val chapterListItems by lazy {
-                if (hideMissingChapters) {
-                    return@lazy processedChapters
-                }
-
                 processedChapters.insertSeparators { before, after ->
                     val (lowerChapter, higherChapter) = if (manga.sortDescending()) {
                         after to before
@@ -1316,6 +1284,7 @@ sealed class ChapterList {
     data class Item(
         val chapter: Chapter,
         val downloadState: Download.State,
+        // TachiyomiAT
         val translationState: Translation.State = Translation.State.NOT_TRANSLATED,
         val downloadProgress: Int,
         val selected: Boolean = false,

@@ -38,13 +38,7 @@ internal class DownloadPageLoader(
 
     override suspend fun getPages(): List<ReaderPage> {
         val dbChapter = chapter.chapter
-        val chapterPath = downloadProvider.findChapterDir(
-            dbChapter.name,
-            dbChapter.scanlator,
-            dbChapter.url,
-            manga.title,
-            source,
-        )
+        val chapterPath = downloadProvider.findChapterDir(dbChapter.name, dbChapter.scanlator, manga.title, source)
         val translations = translationManager.getChapterTranslation(
             chapter.chapter.name,
             chapter.chapter.scanlator,
@@ -84,7 +78,7 @@ internal class DownloadPageLoader(
                 fileName = fileName, // TachiyomiAT: Set fileName for translation deletion
             ).apply {
                 translation = translations[fileName]
-                status = Page.State.Ready
+                status = Page.State.READY
             }
         }
     }

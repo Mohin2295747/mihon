@@ -4,7 +4,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.DpOffset
 import eu.kanade.presentation.manga.DownloadAction
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.i18n.MR
@@ -13,44 +12,10 @@ import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
 fun DownloadDropdownMenu(
-    modifier: Modifier = Modifier,
     expanded: Boolean,
     onDismissRequest: () -> Unit,
     onDownloadClicked: (DownloadAction) -> Unit,
-    offset: DpOffset? = null,
-) {
-    if (offset != null) {
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = onDismissRequest,
-            modifier = modifier,
-            offset = offset,
-            content = {
-                DownloadDropdownMenuItems(
-                    onDismissRequest = onDismissRequest,
-                    onDownloadClicked = onDownloadClicked,
-                )
-            },
-        )
-    } else {
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = onDismissRequest,
-            modifier = modifier,
-            content = {
-                DownloadDropdownMenuItems(
-                    onDismissRequest = onDismissRequest,
-                    onDownloadClicked = onDownloadClicked,
-                )
-            },
-        )
-    }
-}
-
-@Composable
-private fun DownloadDropdownMenuItems(
-    onDismissRequest: () -> Unit,
-    onDownloadClicked: (DownloadAction) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val options = persistentListOf(
         DownloadAction.NEXT_1_CHAPTER to pluralStringResource(MR.plurals.download_amount, 1, 1),
@@ -58,16 +23,21 @@ private fun DownloadDropdownMenuItems(
         DownloadAction.NEXT_10_CHAPTERS to pluralStringResource(MR.plurals.download_amount, 10, 10),
         DownloadAction.NEXT_25_CHAPTERS to pluralStringResource(MR.plurals.download_amount, 25, 25),
         DownloadAction.UNREAD_CHAPTERS to stringResource(MR.strings.download_unread),
-        DownloadAction.BOOKMARKED_CHAPTERS to stringResource(MR.strings.download_bookmarked),
     )
 
-    options.map { (downloadAction, string) ->
-        DropdownMenuItem(
-            text = { Text(text = string) },
-            onClick = {
-                onDownloadClicked(downloadAction)
-                onDismissRequest()
-            },
-        )
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismissRequest,
+        modifier = modifier,
+    ) {
+        options.map { (downloadAction, string) ->
+            DropdownMenuItem(
+                text = { Text(text = string) },
+                onClick = {
+                    onDownloadClicked(downloadAction)
+                    onDismissRequest()
+                },
+            )
+        }
     }
 }

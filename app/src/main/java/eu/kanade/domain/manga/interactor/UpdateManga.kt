@@ -2,9 +2,7 @@ package eu.kanade.domain.manga.interactor
 
 import eu.kanade.domain.manga.model.hasCustomCover
 import eu.kanade.tachiyomi.data.cache.CoverCache
-import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.source.model.SManga
-import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.manga.interactor.FetchInterval
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.manga.model.MangaUpdate
@@ -33,8 +31,6 @@ class UpdateManga(
         remoteManga: SManga,
         manualFetch: Boolean,
         coverCache: CoverCache = Injekt.get(),
-        libraryPreferences: LibraryPreferences = Injekt.get(),
-        downloadManager: DownloadManager = Injekt.get(),
     ): Boolean {
         val remoteTitle = try {
             remoteManga.title
@@ -42,13 +38,8 @@ class UpdateManga(
             ""
         }
 
-        // if the manga isn't a favorite (or 'update titles' preference is enabled), set its title from source and update in db
-        val title =
-            if (remoteTitle.isNotEmpty() && (!localManga.favorite || libraryPreferences.updateMangaTitles().get())) {
-                remoteTitle
-            } else {
-                null
-            }
+        // if the manga isn't a favorite, set its title from source and update in db
+        val title = if (remoteTitle.isEmpty() || localManga.favorite) null else remoteTitle
 
         val coverLastModified =
             when {
@@ -68,7 +59,7 @@ class UpdateManga(
 
         val thumbnailUrl = remoteManga.thumbnail_url?.takeIf { it.isNotEmpty() }
 
-        val success = mangaRepository.update(
+        return mangaRepository.update(
             MangaUpdate(
                 id = localManga.id,
                 title = title,
@@ -83,10 +74,6 @@ class UpdateManga(
                 initialized = true,
             ),
         )
-        if (success && title != null) {
-            downloadManager.renameManga(localManga, title)
-        }
-        return success
     }
 
     suspend fun awaitUpdateFetchInterval(

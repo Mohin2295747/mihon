@@ -25,7 +25,7 @@ internal class ArchivePageLoader(
                     fileName = entry.name // TachiyomiAT: Set fileName for translation deletion
                     translation = translations[entry.name]
                     stream = { reader.getInputStream(entry.name)!! }
-                    status = Page.State.Ready
+                    status = Page.State.READY
                 }
             }
             .toList()

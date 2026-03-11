@@ -80,7 +80,6 @@ class ChapterLoader(
         val isDownloaded = downloadManager.isChapterDownloaded(
             dbChapter.name,
             dbChapter.scanlator,
-            dbChapter.url,
             manga.title,
             manga.source,
             skipCache = true,

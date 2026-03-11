@@ -17,7 +17,6 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
-import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.allowRgb565
 import coil3.request.crossfade
@@ -53,9 +52,9 @@ import kotlinx.coroutines.flow.onEach
 import logcat.AndroidLogcatLogger
 import logcat.LogPriority
 import logcat.LogcatLogger
+import mihon.core.firebase.FirebaseConfig
 import mihon.core.migration.Migrator
 import mihon.core.migration.migrations.migrations
-import mihon.telemetry.TelemetryConfig
 import org.conscrypt.Conscrypt
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.Preference
@@ -81,7 +80,7 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
     override fun onCreate() {
         super<Application>.onCreate()
         patchInjekt()
-        TelemetryConfig.init(applicationContext)
+        FirebaseConfig.init(applicationContext)
 
         GlobalExceptionHandler.initialize(applicationContext, CrashActivity::class.java)
 
@@ -123,7 +122,7 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
                         val pendingIntent = PendingIntent.getBroadcast(
                             this@App,
                             0,
-                            Intent(ACTION_DISABLE_INCOGNITO_MODE).setPackage(BuildConfig.APPLICATION_ID),
+                            Intent(ACTION_DISABLE_INCOGNITO_MODE),
                             PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE,
                         )
                         setContentIntent(pendingIntent)
@@ -137,12 +136,12 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
 
         privacyPreferences.analytics()
             .changes()
-            .onEach(TelemetryConfig::setAnalyticsEnabled)
+            .onEach(FirebaseConfig::setAnalyticsEnabled)
             .launchIn(scope)
 
         privacyPreferences.crashlytics()
             .changes()
-            .onEach(TelemetryConfig::setCrashlyticsEnabled)
+            .onEach(FirebaseConfig::setCrashlyticsEnabled)
             .launchIn(scope)
 
         basePreferences.hardwareBitmapThreshold().let { preference ->
@@ -158,14 +157,8 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         // Updates widget update
         WidgetManager(Injekt.get(), Injekt.get()).apply { init(scope) }
 
-        if (!LogcatLogger.isInstalled) {
-            val minLogPriority = when {
-                networkPreferences.verboseLogging().get() -> LogPriority.VERBOSE
-                BuildConfig.DEBUG -> LogPriority.DEBUG
-                else -> LogPriority.INFO
-            }
-            LogcatLogger.install()
-            LogcatLogger.loggers += AndroidLogcatLogger(minLogPriority)
+        if (!LogcatLogger.isInstalled && networkPreferences.verboseLogging().get()) {
+            LogcatLogger.install(AndroidLogcatLogger(LogPriority.VERBOSE))
         }
 
         initializeMigrator()
@@ -203,12 +196,6 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
                 add(MangaKeyer())
             }
 
-            memoryCache(
-                MemoryCache.Builder()
-                    .maxSizePercent(context)
-                    .build(),
-            )
-
             crossfade((300 * this@App.animatorDurationScale).toInt())
             allowRgb565(DeviceUtil.isLowRamDevice(this@App))
             if (networkPreferences.verboseLogging().get()) logger(DebugLogger())
@@ -232,15 +219,17 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         try {
             // Override the value passed as X-Requested-With in WebView requests
             val stackTrace = Looper.getMainLooper().thread.stackTrace
-            val isChromiumCall = stackTrace.any { trace ->
-                trace.className.lowercase() in setOf("org.chromium.base.buildinfo", "org.chromium.base.apkinfo") &&
-                    trace.methodName.lowercase() in setOf("getall", "getpackagename", "<init>")
+            val chromiumElement = stackTrace.find {
+                it.className.equals(
+                    "org.chromium.base.BuildInfo",
+                    ignoreCase = true,
+                )
             }
-
-            if (isChromiumCall) return WebViewUtil.spoofedPackageName(applicationContext)
+            if (chromiumElement?.methodName.equals("getAll", ignoreCase = true)) {
+                return WebViewUtil.SPOOF_PACKAGE_NAME
+            }
         } catch (_: Exception) {
         }
-
         return super.getPackageName()
     }
 

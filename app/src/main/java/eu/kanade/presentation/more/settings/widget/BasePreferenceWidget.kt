@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -85,8 +86,7 @@ internal fun BasePreferenceWidget(
     }
 }
 
-@Composable
-internal fun Modifier.highlightBackground(highlighted: Boolean): Modifier {
+internal fun Modifier.highlightBackground(highlighted: Boolean): Modifier = composed {
     var highlightFlag by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         if (highlighted) {
@@ -116,7 +116,7 @@ internal fun Modifier.highlightBackground(highlighted: Boolean): Modifier {
         },
         label = "highlight",
     )
-    return this.background(color = highlight)
+    Modifier.background(color = highlight)
 }
 
 internal val TrailingWidgetBuffer = 16.dp

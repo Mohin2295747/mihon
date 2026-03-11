@@ -13,6 +13,7 @@ import eu.kanade.presentation.category.CategoryScreen
 import eu.kanade.presentation.category.components.CategoryCreateDialog
 import eu.kanade.presentation.category.components.CategoryDeleteDialog
 import eu.kanade.presentation.category.components.CategoryRenameDialog
+import eu.kanade.presentation.category.components.CategorySortAlphabeticallyDialog
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.toImmutableList
@@ -39,9 +40,11 @@ class CategoryScreen : Screen() {
         CategoryScreen(
             state = successState,
             onClickCreate = { screenModel.showDialog(CategoryDialog.Create) },
+            onClickSortAlphabetically = { screenModel.showDialog(CategoryDialog.SortAlphabetically) },
             onClickRename = { screenModel.showDialog(CategoryDialog.Rename(it)) },
             onClickDelete = { screenModel.showDialog(CategoryDialog.Delete(it)) },
-            onChangeOrder = screenModel::changeOrder,
+            onClickMoveUp = screenModel::moveUp,
+            onClickMoveDown = screenModel::moveDown,
             navigateUp = navigator::pop,
         )
 
@@ -67,6 +70,12 @@ class CategoryScreen : Screen() {
                     onDismissRequest = screenModel::dismissDialog,
                     onDelete = { screenModel.deleteCategory(dialog.category.id) },
                     category = dialog.category.name,
+                )
+            }
+            is CategoryDialog.SortAlphabetically -> {
+                CategorySortAlphabeticallyDialog(
+                    onDismissRequest = screenModel::dismissDialog,
+                    onSort = { screenModel.sortAlphabetically() },
                 )
             }
         }

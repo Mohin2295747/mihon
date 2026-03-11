@@ -24,7 +24,7 @@ package tachiyomi.presentation.core.util
  * SOFTWARE.
  */
 
-/*
+/**
  * Code taken from https://gist.github.com/mxalbert1996/33a360fcab2105a31e5355af98216f5a
  * with some modifications to handle contentPadding.
  *
@@ -47,6 +47,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -64,7 +65,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastFirstOrNull
 import androidx.compose.ui.util.fastSumBy
 import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.sample
@@ -75,7 +75,6 @@ import tachiyomi.presentation.core.components.Scroller.STICKY_HEADER_KEY_PREFIX
  *
  * Set key with [STICKY_HEADER_KEY_PREFIX] prefix to any sticky header item in the list.
  */
-@Composable
 fun Modifier.drawHorizontalScrollbar(
     state: LazyListState,
     reverseScrolling: Boolean = false,
@@ -88,7 +87,6 @@ fun Modifier.drawHorizontalScrollbar(
  *
  * Set key with [STICKY_HEADER_KEY_PREFIX] prefix to any sticky header item in the list.
  */
-@Composable
 fun Modifier.drawVerticalScrollbar(
     state: LazyListState,
     reverseScrolling: Boolean = false,
@@ -96,7 +94,6 @@ fun Modifier.drawVerticalScrollbar(
     positionOffsetPx: Float = 0f,
 ): Modifier = drawScrollbar(state, Orientation.Vertical, reverseScrolling, positionOffsetPx)
 
-@Composable
 private fun Modifier.drawScrollbar(
     state: LazyListState,
     orientation: Orientation,
@@ -181,7 +178,6 @@ private fun ContentDrawScope.onDrawScrollbar(
     }
 }
 
-@Composable
 private fun Modifier.drawScrollbar(
     orientation: Orientation,
     reverseScrolling: Boolean,
@@ -192,7 +188,7 @@ private fun Modifier.drawScrollbar(
         color: Color,
         alpha: () -> Float,
     ) -> Unit,
-): Modifier {
+): Modifier = composed {
     val scrolled = remember {
         MutableSharedFlow<Unit>(
             extraBufferCapacity = 1,
@@ -219,8 +215,7 @@ private fun Modifier.drawScrollbar(
             .sample(100)
             .collectLatest {
                 alpha.snapTo(1f)
-                delay(ScrollBarVisibilityDurationMillis)
-                alpha.animateTo(0f, animationSpec = ImmediateFadeOutAnimationSpec)
+                alpha.animateTo(0f, animationSpec = FadeOutAnimationSpec)
             }
     }
 
@@ -235,17 +230,16 @@ private fun Modifier.drawScrollbar(
     val context = LocalContext.current
     val thickness = remember { ViewConfiguration.get(context).scaledScrollBarSize.toFloat() }
     val color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.364f)
-
-    return this
+    Modifier
         .nestedScroll(nestedScrollConnection)
         .drawWithContent {
             onDraw(reverseDirection, atEnd, thickness, color, alpha::value)
         }
 }
 
-private val ScrollBarVisibilityDurationMillis = ViewConfiguration.getScrollDefaultDelay().toLong()
-private val ImmediateFadeOutAnimationSpec = tween<Float>(
+private val FadeOutAnimationSpec = tween<Float>(
     durationMillis = ViewConfiguration.getScrollBarFadeDuration(),
+    delayMillis = ViewConfiguration.getScrollDefaultDelay(),
 )
 
 @Preview(widthDp = 400, heightDp = 400, showBackground = true)

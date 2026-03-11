@@ -6,8 +6,7 @@ import com.jakewharton.disklrucache.DiskLruCache
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.tachiyomi.util.storage.saveTo
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
 import okhttp3.Response
@@ -45,12 +44,16 @@ class ChapterCache(
     private val cacheDir: File = diskCache.directory
 
     /**
+     * Returns real size of directory.
+     */
+    private val realSize: Long
+        get() = DiskUtil.getDirectorySize(cacheDir)
+
+    /**
      * Returns real size of directory in human readable format.
      */
-    suspend fun getReadableSize(): String = withContext(Dispatchers.IO) {
-        val size = DiskUtil.getDirectorySize(cacheDir)
-        Formatter.formatFileSize(context, size)
-    }
+    val readableSize: String
+        get() = Formatter.formatFileSize(context, realSize)
 
     /**
      * Get page list from cache.
@@ -112,7 +115,7 @@ class ChapterCache(
     fun isImageInCache(imageUrl: String): Boolean {
         return try {
             diskCache.get(DiskUtil.hashKeyForDisk(imageUrl)).use { it != null }
-        } catch (_: IOException) {
+        } catch (e: IOException) {
             false
         }
     }
@@ -144,7 +147,7 @@ class ChapterCache(
         try {
             // Get editor from md5 key.
             val key = DiskUtil.hashKeyForDisk(imageUrl)
-            editor = diskCache.edit(key) ?: return
+            editor = diskCache.edit(key) ?: throw IOException("Unable to edit key")
 
             // Get OutputStream and write image with Okio.
             response.body.source().saveTo(editor.newOutputStream(0))

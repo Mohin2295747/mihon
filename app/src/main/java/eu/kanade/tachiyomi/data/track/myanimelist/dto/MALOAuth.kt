@@ -1,6 +1,5 @@
 package eu.kanade.tachiyomi.data.track.myanimelist.dto
 
-import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -15,11 +14,10 @@ data class MALOAuth(
     @SerialName("expires_in")
     val expiresIn: Long,
     @SerialName("created_at")
-    @EncodeDefault
-    val createdAt: Long = System.currentTimeMillis() / 1000,
+    val createdAt: Long = System.currentTimeMillis(),
 ) {
     // Assumes expired a minute earlier
-    private val adjustedExpiresIn: Long = (expiresIn - 60)
+    private val adjustedExpiresIn: Long = (expiresIn - 60) * 1000
 
-    fun isExpired() = createdAt + adjustedExpiresIn < System.currentTimeMillis() / 1000
+    fun isExpired() = createdAt + adjustedExpiresIn < System.currentTimeMillis()
 }

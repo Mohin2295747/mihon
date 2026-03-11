@@ -6,51 +6,45 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class BGMSearchResult(
-    val total: Int,
-    val limit: Int,
-    val offset: Int,
-    val data: List<BGMSubject> = emptyList(),
+    val list: List<BGMSearchItem>?,
+    val code: Int?,
 )
 
 @Serializable
-// Incomplete DTO with only our needed attributes
-data class BGMSubject(
+data class BGMSearchItem(
     val id: Long,
     @SerialName("name_cn")
     val nameCn: String,
     val name: String,
+    val type: Int,
     val summary: String?,
-    val date: String?, // YYYY-MM-DD
-    val images: BGMSubjectImages?,
-    val volumes: Long = 0,
-    val eps: Long = 0,
-    val rating: BGMSubjectRating?,
-    val platform: String?,
+    val images: BGMSearchItemCovers?,
+    @SerialName("eps_count")
+    val epsCount: Long?,
+    val rating: BGMSearchItemRating?,
+    val url: String,
 ) {
     fun toTrackSearch(trackId: Long): TrackSearch = TrackSearch.create(trackId).apply {
-        remote_id = this@BGMSubject.id
+        remote_id = this@BGMSearchItem.id
         title = nameCn.ifBlank { name }
         cover_url = images?.common.orEmpty()
         summary = if (nameCn.isNotBlank()) {
-            "作品原名：$name" + this@BGMSubject.summary?.let { "\n${it.trim()}" }.orEmpty()
+            "作品原名：$name" + this@BGMSearchItem.summary?.let { "\n$it" }.orEmpty()
         } else {
-            this@BGMSubject.summary?.trim().orEmpty()
+            this@BGMSearchItem.summary.orEmpty()
         }
         score = rating?.score ?: -1.0
-        tracking_url = "https://bangumi.tv/subject/${this@BGMSubject.id}"
-        total_chapters = eps
-        start_date = date ?: ""
+        tracking_url = url
+        total_chapters = epsCount ?: 0
     }
 }
 
 @Serializable
-// Incomplete DTO with only our needed attributes
-data class BGMSubjectImages(
+data class BGMSearchItemCovers(
     val common: String?,
 )
 
 @Serializable
-// Incomplete DTO with only our needed attributes
-data class BGMSubjectRating(
+data class BGMSearchItemRating(
     val score: Double?,
 )

@@ -26,29 +26,22 @@ class DownloadPreferences(
 
     fun removeBookmarkedChapters() = preferenceStore.getBoolean("pref_remove_bookmarked", false)
 
-    fun removeExcludeCategories() = preferenceStore.getStringSet(REMOVE_EXCLUDE_CATEGORIES_PREF_KEY, emptySet())
+    fun removeExcludeCategories() = preferenceStore.getStringSet(
+        "remove_exclude_categories",
+        emptySet(),
+    )
 
     fun downloadNewChapters() = preferenceStore.getBoolean("download_new", false)
 
-    fun downloadNewChapterCategories() = preferenceStore.getStringSet(DOWNLOAD_NEW_CATEGORIES_PREF_KEY, emptySet())
+    fun downloadNewChapterCategories() = preferenceStore.getStringSet(
+        "download_new_categories",
+        emptySet(),
+    )
 
-    fun downloadNewChapterCategoriesExclude() =
-        preferenceStore.getStringSet(DOWNLOAD_NEW_CATEGORIES_EXCLUDE_PREF_KEY, emptySet())
+    fun downloadNewChapterCategoriesExclude() = preferenceStore.getStringSet(
+        "download_new_categories_exclude",
+        emptySet(),
+    )
 
     fun downloadNewUnreadChaptersOnly() = preferenceStore.getBoolean("download_new_unread_chapters_only", false)
-
-    fun parallelSourceLimit() = preferenceStore.getInt("download_parallel_source_limit", 5)
-
-    fun parallelPageLimit() = preferenceStore.getInt("download_parallel_page_limit", 5)
-
-    companion object {
-        private const val REMOVE_EXCLUDE_CATEGORIES_PREF_KEY = "remove_exclude_categories"
-        private const val DOWNLOAD_NEW_CATEGORIES_PREF_KEY = "download_new_categories"
-        private const val DOWNLOAD_NEW_CATEGORIES_EXCLUDE_PREF_KEY = "download_new_categories_exclude"
-        val categoryPreferenceKeys = setOf(
-            REMOVE_EXCLUDE_CATEGORIES_PREF_KEY,
-            DOWNLOAD_NEW_CATEGORIES_PREF_KEY,
-            DOWNLOAD_NEW_CATEGORIES_EXCLUDE_PREF_KEY,
-        )
-    }
 }

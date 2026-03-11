@@ -16,23 +16,20 @@ import rx.Observable
 import rx.Producer
 import rx.Subscription
 import java.io.IOException
-import kotlin.concurrent.atomics.AtomicBoolean
-import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resumeWithException
 
 val jsonMime = "application/json; charset=utf-8".toMediaType()
 
-@OptIn(ExperimentalAtomicApi::class)
 fun Call.asObservable(): Observable<Response> {
     return Observable.unsafeCreate { subscriber ->
         // Since Call is a one-shot type, clone it for each new subscriber.
         val call = clone()
 
         // Wrap the call in a helper which handles both unsubscription and backpressure.
-        val requestArbiter = object : Producer, Subscription {
-            val boolean = AtomicBoolean(false)
+        val requestArbiter = object : AtomicBoolean(), Producer, Subscription {
             override fun request(n: Long) {
-                if (n == 0L || !boolean.compareAndSet(expectedValue = false, newValue = true)) return
+                if (n == 0L || !compareAndSet(false, true)) return
 
                 try {
                     val response = call.execute()
@@ -134,18 +131,18 @@ fun OkHttpClient.newCachelessCallWithProgress(request: Request, listener: Progre
     return progressClient.newCall(request)
 }
 
-context(_: Json)
+context(Json)
 inline fun <reified T> Response.parseAs(): T {
     return decodeFromJsonResponse(serializer(), this)
 }
 
-context(json: Json)
+context(Json)
 fun <T> decodeFromJsonResponse(
     deserializer: DeserializationStrategy<T>,
     response: Response,
 ): T {
     return response.body.source().use {
-        json.decodeFromBufferedSource(deserializer, it)
+        decodeFromBufferedSource(deserializer, it)
     }
 }
 

@@ -40,7 +40,6 @@ fun GlobalSearchScreen(
                 navigateUp = navigateUp,
                 onChangeSearchQuery = onChangeSearchQuery,
                 onSearch = onSearch,
-                hideSourceFilter = false,
                 sourceFilter = state.sourceFilter,
                 onChangeSearchFilter = onChangeSearchFilter,
                 onlyShowHasResults = state.onlyShowHasResults,

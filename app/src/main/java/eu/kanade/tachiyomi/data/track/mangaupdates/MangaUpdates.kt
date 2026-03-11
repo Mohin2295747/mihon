@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.data.track.mangaupdates
 
+import android.graphics.Color
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Track
@@ -41,7 +42,9 @@ class MangaUpdates(id: Long) : BaseTracker(id, "MangaUpdates"), DeletableTracker
 
     private val api by lazy { MangaUpdatesApi(interceptor, client) }
 
-    override fun getLogo(): Int = R.drawable.brand_mangaupdates
+    override fun getLogo(): Int = R.drawable.ic_manga_updates
+
+    override fun getLogoColor(): Int = Color.rgb(146, 160, 173)
 
     override fun getStatusList(): List<Long> {
         return listOf(READING_LIST, COMPLETE_LIST, ON_HOLD_LIST, UNFINISHED_LIST, WISH_LIST)

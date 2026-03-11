@@ -26,7 +26,6 @@ fun List<Chapter>.applyFilters(manga: Manga, downloadManager: DownloadManager): 
                 val downloaded = downloadManager.isChapterDownloaded(
                     chapter.name,
                     chapter.scanlator,
-                    chapter.url,
                     manga.title,
                     manga.source,
                 )

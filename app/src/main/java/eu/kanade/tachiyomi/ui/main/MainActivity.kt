@@ -54,7 +54,6 @@ import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.NavigatorDisposeBehavior
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.base.BasePreferences
-import eu.kanade.domain.source.interactor.GetIncognitoState
 import eu.kanade.presentation.components.AppStateBanners
 import eu.kanade.presentation.components.DownloadedOnlyBannerBackgroundColor
 import eu.kanade.presentation.components.IncognitoModeBannerBackgroundColor
@@ -81,7 +80,6 @@ import eu.kanade.tachiyomi.ui.more.OnboardingScreen
 import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.isNavigationBarNeedsScrim
 import eu.kanade.tachiyomi.util.system.openInBrowser
-import eu.kanade.tachiyomi.util.system.updaterEnabled
 import eu.kanade.tachiyomi.util.view.setComposeContent
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
@@ -112,8 +110,6 @@ class MainActivity : BaseActivity() {
     private val downloadCache: DownloadCache by injectLazy()
     private val chapterCache: ChapterCache by injectLazy()
 
-    private val getIncognitoState: GetIncognitoState by injectLazy()
-
     // To be checked by splash screen. If true then splash screen will be removed.
     var ready = false
 
@@ -131,6 +127,8 @@ class MainActivity : BaseActivity() {
 
         super.onCreate(savedInstanceState)
 
+        val didMigration = Migrator.awaitAndRelease()
+
         // Do not let the launcher create a new activity http://stackoverflow.com/questions/16283079
         if (!isTaskRoot) {
             finish()
@@ -138,14 +136,9 @@ class MainActivity : BaseActivity() {
         }
 
         setComposeContent {
-            var didMigration by remember { mutableStateOf<Boolean?>(null) }
-            LaunchedEffect(Unit) {
-                didMigration = Migrator.awaitAndRelease()
-            }
-
             val context = LocalContext.current
 
-            var incognito by remember { mutableStateOf(getIncognitoState.await(null)) }
+            val incognito by preferences.incognitoMode().collectAsState()
             val downloadOnly by preferences.downloadedOnly().collectAsState()
             val indexing by downloadCache.isInitializing.collectAsState()
 
@@ -180,11 +173,6 @@ class MainActivity : BaseActivity() {
                         // Reset Incognito Mode on relaunch
                         preferences.incognitoMode().set(false)
                     }
-                }
-                LaunchedEffect(navigator.lastItem) {
-                    (navigator.lastItem as? BrowseSourceScreen)?.sourceId
-                        .let(getIncognitoState::subscribe)
-                        .collectLatest { incognito = it }
                 }
 
                 val scaffoldInsets = WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal)
@@ -245,7 +233,7 @@ class MainActivity : BaseActivity() {
                 ShowOnboarding()
             }
 
-            var showChangelog by remember { mutableStateOf(didMigration == true && !BuildConfig.DEBUG) }
+            var showChangelog by remember { mutableStateOf(didMigration && !BuildConfig.DEBUG) }
             if (showChangelog) {
                 AlertDialog(
                     onDismissRequest = { showChangelog = false },
@@ -307,7 +295,7 @@ class MainActivity : BaseActivity() {
 
         // App updates
         LaunchedEffect(Unit) {
-            if (updaterEnabled) {
+            if (BuildConfig.INCLUDE_UPDATER) {
                 try {
                     val result = AppUpdateChecker().checkForUpdate(context)
                     if (result is GetApplicationRelease.Result.NewUpdate) {
@@ -315,7 +303,7 @@ class MainActivity : BaseActivity() {
                             versionName = result.release.version,
                             changelogInfo = result.release.info,
                             releaseLink = result.release.releaseLink,
-                            downloadLink = result.release.downloadLink,
+                            downloadLink = result.release.getDownloadLink(),
                         )
                         navigator.push(updateScreen)
                     }

@@ -37,8 +37,6 @@ abstract class BaseTracker(
     // Application and remote support for reading dates
     override val supportsReadingDates: Boolean = false
 
-    override val supportsPrivateTracking: Boolean = false
-
     // TODO: Store all scores as 10 point in the future maybe?
     override fun get10PointScore(track: DomainTrack): Double {
         return track.score
@@ -119,11 +117,6 @@ abstract class BaseTracker(
 
     override suspend fun setRemoteFinishDate(track: Track, epochMillis: Long) {
         track.finished_reading_date = epochMillis
-        updateRemote(track)
-    }
-
-    override suspend fun setRemotePrivate(track: Track, private: Boolean) {
-        track.private = private
         updateRemote(track)
     }
 

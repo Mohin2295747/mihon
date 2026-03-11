@@ -64,14 +64,18 @@ open class ReaderPageImageView @JvmOverloads constructor(
         Injekt.get<BasePreferences>().alwaysDecodeLongStripWithSSIV().get()
     }
 
+    // TachiyomiAT : need this for textblock placements
     var pageView: View? = null
 
     private var config: Config? = null
 
     var onImageLoaded: (() -> Unit)? = null
-    var onImageLoadError: ((Throwable?) -> Unit)? = null
+    var onImageLoadError: (() -> Unit)? = null
     var onScaleChanged: ((newScale: Float) -> Unit)? = null
+
+    // TachiyomiAT
     var onCenterChanged: ((newCenter: PointF) -> Unit)? = null
+
     var onViewClicked: (() -> Unit)? = null
 
     /**
@@ -86,15 +90,16 @@ open class ReaderPageImageView @JvmOverloads constructor(
     }
 
     @CallSuper
-    open fun onImageLoadError(error: Throwable?) {
-        onImageLoadError?.invoke(error)
+    open fun onImageLoadError() {
+        onImageLoadError?.invoke()
     }
 
     @CallSuper
     open fun onScaleChanged(newScale: Float) {
         onScaleChanged?.invoke(newScale)
     }
-    
+
+    // TachiyomiAT
     @CallSuper
     open fun onCenterChanged(newCenter: PointF?) {
         if (newCenter != null) onCenterChanged?.invoke(newCenter)
@@ -120,7 +125,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
                         }
 
                         override fun onImageLoadError(e: Exception) {
-                            onImageLoadError(e)
+                            onImageLoadError()
                         }
                     },
                 )
@@ -297,7 +302,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
                 }
 
                 override fun onImageLoadError(e: Exception) {
-                    this@ReaderPageImageView.onImageLoadError(e)
+                    this@ReaderPageImageView.onImageLoadError()
                 }
             },
         )
@@ -325,10 +330,8 @@ open class ReaderPageImageView @JvmOverloads constructor(
                             setImage(ImageSource.bitmap(image.bitmap))
                             isVisible = true
                         },
-                    )
-                    .listener(
-                        onError = { _, result ->
-                            onImageLoadError(result.throwable)
+                        onError = {
+                            onImageLoadError()
                         },
                     )
                     .size(ViewSizeResolver(this@ReaderPageImageView))
@@ -404,10 +407,8 @@ open class ReaderPageImageView @JvmOverloads constructor(
                     isVisible = true
                     this@ReaderPageImageView.onImageLoaded()
                 },
-            )
-            .listener(
-                onError = { _, result ->
-                    onImageLoadError(result.throwable)
+                onError = {
+                    this@ReaderPageImageView.onImageLoadError()
                 },
             )
             .crossfade(false)

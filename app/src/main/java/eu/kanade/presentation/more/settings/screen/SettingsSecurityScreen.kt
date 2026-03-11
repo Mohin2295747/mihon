@@ -11,7 +11,6 @@ import eu.kanade.tachiyomi.core.security.PrivacyPreferences
 import eu.kanade.tachiyomi.core.security.SecurityPreferences
 import eu.kanade.tachiyomi.util.system.AuthenticatorUtil.authenticate
 import eu.kanade.tachiyomi.util.system.AuthenticatorUtil.isAuthenticationSupported
-import eu.kanade.tachiyomi.util.system.telemetryIncluded
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableMap
 import tachiyomi.core.common.i18n.stringResource
@@ -32,11 +31,10 @@ object SettingsSecurityScreen : SearchableSettings {
     override fun getPreferences(): List<Preference> {
         val securityPreferences = remember { Injekt.get<SecurityPreferences>() }
         val privacyPreferences = remember { Injekt.get<PrivacyPreferences>() }
-        return buildList(2) {
-            add(getSecurityGroup(securityPreferences))
-            if (!telemetryIncluded) return@buildList
-            add(getFirebaseGroup(privacyPreferences))
-        }
+        return listOf(
+            getSecurityGroup(securityPreferences),
+            getFirebaseGroup(privacyPreferences),
+        )
     }
 
     @Composable
@@ -52,7 +50,7 @@ object SettingsSecurityScreen : SearchableSettings {
             title = stringResource(MR.strings.pref_security),
             preferenceItems = persistentListOf(
                 Preference.PreferenceItem.SwitchPreference(
-                    preference = useAuthPref,
+                    pref = useAuthPref,
                     title = stringResource(MR.strings.lock_with_biometrics),
                     enabled = authSupported,
                     onValueChanged = {
@@ -62,7 +60,9 @@ object SettingsSecurityScreen : SearchableSettings {
                     },
                 ),
                 Preference.PreferenceItem.ListPreference(
-                    preference = securityPreferences.lockAppAfter(),
+                    pref = securityPreferences.lockAppAfter(),
+                    title = stringResource(MR.strings.lock_when_idle),
+                    enabled = authSupported && useAuth,
                     entries = LockAfterValues
                         .associateWith {
                             when (it) {
@@ -72,8 +72,6 @@ object SettingsSecurityScreen : SearchableSettings {
                             }
                         }
                         .toImmutableMap(),
-                    title = stringResource(MR.strings.lock_when_idle),
-                    enabled = authSupported && useAuth,
                     onValueChanged = {
                         (context as FragmentActivity).authenticate(
                             title = context.stringResource(MR.strings.lock_when_idle),
@@ -82,15 +80,15 @@ object SettingsSecurityScreen : SearchableSettings {
                 ),
 
                 Preference.PreferenceItem.SwitchPreference(
-                    preference = securityPreferences.hideNotificationContent(),
+                    pref = securityPreferences.hideNotificationContent(),
                     title = stringResource(MR.strings.hide_notification_content),
                 ),
                 Preference.PreferenceItem.ListPreference(
-                    preference = securityPreferences.secureScreen(),
+                    pref = securityPreferences.secureScreen(),
+                    title = stringResource(MR.strings.secure_screen),
                     entries = SecurityPreferences.SecureScreenMode.entries
                         .associateWith { stringResource(it.titleRes) }
                         .toImmutableMap(),
-                    title = stringResource(MR.strings.secure_screen),
                 ),
                 Preference.PreferenceItem.InfoPreference(stringResource(MR.strings.secure_screen_summary)),
             ),
@@ -105,12 +103,12 @@ object SettingsSecurityScreen : SearchableSettings {
             title = stringResource(MR.strings.pref_firebase),
             preferenceItems = persistentListOf(
                 Preference.PreferenceItem.SwitchPreference(
-                    preference = privacyPreferences.crashlytics(),
+                    pref = privacyPreferences.crashlytics(),
                     title = stringResource(MR.strings.onboarding_permission_crashlytics),
                     subtitle = stringResource(MR.strings.onboarding_permission_crashlytics_description),
                 ),
                 Preference.PreferenceItem.SwitchPreference(
-                    preference = privacyPreferences.analytics(),
+                    pref = privacyPreferences.analytics(),
                     title = stringResource(MR.strings.onboarding_permission_analytics),
                     subtitle = stringResource(MR.strings.onboarding_permission_analytics_description),
                 ),

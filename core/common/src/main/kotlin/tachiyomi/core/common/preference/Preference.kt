@@ -57,10 +57,6 @@ operator fun <T> Preference<Set<T>>.plusAssign(item: T) {
     set(get() + item)
 }
 
-operator fun <T> Preference<Set<T>>.plusAssign(items: Iterable<T>) {
-    set(get() + items)
-}
-
 operator fun <T> Preference<Set<T>>.minusAssign(item: T) {
     set(get() - item)
 }

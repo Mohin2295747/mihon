@@ -51,8 +51,15 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
         val prevHasMissingChapters = calculateChapterGap(chapters.currChapter, chapters.prevChapter) > 0
         val nextHasMissingChapters = calculateChapterGap(chapters.nextChapter, chapters.currChapter) > 0
 
-        // Add previous chapter pages and transition
-        chapters.prevChapter?.pages?.let(newItems::addAll)
+        // Add previous chapter pages and transition.
+        if (chapters.prevChapter != null) {
+            // We only need to add the last few pages of the previous chapter, because it'll be
+            // selected as the current chapter when one of those pages is selected.
+            val prevPages = chapters.prevChapter.pages
+            if (prevPages != null) {
+                newItems.addAll(prevPages.takeLast(2))
+            }
+        }
 
         // Skip transition page if the chapter is loaded & current page is not a transition page
         if (prevHasMissingChapters || forceTransition || chapters.prevChapter?.state !is ReaderChapter.State.Loaded) {
@@ -94,7 +101,14 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
                 }
             }
 
-        chapters.nextChapter?.pages?.let(newItems::addAll)
+        if (chapters.nextChapter != null) {
+            // Add at most two pages, because this chapter will be selected before the user can
+            // swap more pages.
+            val nextPages = chapters.nextChapter.pages
+            if (nextPages != null) {
+                newItems.addAll(nextPages.take(2))
+            }
+        }
 
         // Resets double-page splits, else insert pages get misplaced
         items.filterIsInstance<InsertPage>().also { items.removeAll(it) }
@@ -109,7 +123,7 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
 
         // Will skip insert page otherwise
         if (insertPageLastPage != null) {
-            viewer.moveToPage(insertPageLastPage)
+            viewer.moveToPage(insertPageLastPage!!)
         }
     }
 
@@ -180,7 +194,7 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
     }
 
     fun cleanupPageSplit() {
-        val insertPages = items.filterIsInstance<InsertPage>()
+        val insertPages = items.filterIsInstance(InsertPage::class.java)
         items.removeAll(insertPages)
         notifyDataSetChanged()
     }

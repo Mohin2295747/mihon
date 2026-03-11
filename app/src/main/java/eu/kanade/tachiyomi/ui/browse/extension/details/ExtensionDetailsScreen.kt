@@ -39,7 +39,6 @@ data class ExtensionDetailsScreen(
             onClickClearCookies = screenModel::clearCookies,
             onClickUninstall = screenModel::uninstallExtension,
             onClickSource = screenModel::toggleSource,
-            onClickIncognito = screenModel::toggleIncognito,
         )
 
         LaunchedEffect(Unit) {

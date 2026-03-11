@@ -80,19 +80,6 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
             }
         }
 
-    private val pagerListener = object : ViewPager.SimpleOnPageChangeListener() {
-        override fun onPageSelected(position: Int) {
-            if (!activity.isScrollingThroughPages) {
-                activity.hideMenu()
-            }
-            onPageChange(position)
-        }
-
-        override fun onPageScrollStateChanged(state: Int) {
-            isIdle = state == ViewPager.SCROLL_STATE_IDLE
-        }
-    }
-
     init {
         pager.isVisible = false // Don't layout the pager yet
         pager.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
@@ -100,7 +87,20 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
         pager.offscreenPageLimit = 1
         pager.id = R.id.reader_pager
         pager.adapter = adapter
-        pager.addOnPageChangeListener(pagerListener)
+        pager.addOnPageChangeListener(
+            object : ViewPager.SimpleOnPageChangeListener() {
+                override fun onPageSelected(position: Int) {
+                    if (!activity.isScrollingThroughPages) {
+                        activity.hideMenu()
+                    }
+                    onPageChange(position)
+                }
+
+                override fun onPageScrollStateChanged(state: Int) {
+                    isIdle = state == ViewPager.SCROLL_STATE_IDLE
+                }
+            },
+        )
         pager.tapListener = { event ->
             val viewPosition = IntArray(2)
             pager.getLocationOnScreen(viewPosition)
@@ -275,9 +275,6 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
      * Sets the active [chapters] on this pager.
      */
     private fun setChaptersInternal(chapters: ViewerChapters) {
-        // Remove listener so the change in item doesn't trigger it
-        pager.removeOnPageChangeListener(pagerListener)
-
         val forceTransition = config.alwaysShowChapterTransition ||
             adapter.items.getOrNull(pager.currentItem) is ChapterTransition
         adapter.setChapters(chapters, forceTransition)
@@ -289,10 +286,6 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
             moveToPage(pages[min(chapters.currChapter.requestedPage, pages.lastIndex)])
             pager.isVisible = true
         }
-
-        pager.addOnPageChangeListener(pagerListener)
-        // Manually call onPageChange to update the UI
-        onPageChange(pager.currentItem)
     }
 
     /**

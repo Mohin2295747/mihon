@@ -35,9 +35,7 @@ import eu.kanade.tachiyomi.ui.more.NewUpdateScreen
 import eu.kanade.tachiyomi.util.CrashLogUtil
 import eu.kanade.tachiyomi.util.lang.toDateTimestampString
 import eu.kanade.tachiyomi.util.system.copyToClipboard
-import eu.kanade.tachiyomi.util.system.isPreviewBuildType
 import eu.kanade.tachiyomi.util.system.toast
-import eu.kanade.tachiyomi.util.system.updaterEnabled
 import kotlinx.coroutines.launch
 import logcat.LogPriority
 import tachiyomi.core.common.util.lang.withIOContext
@@ -99,7 +97,7 @@ object AboutScreen : Screen() {
                     )
                 }
 
-                if (updaterEnabled) {
+                if (BuildConfig.INCLUDE_UPDATER) {
                     item {
                         TextPreferenceWidget(
                             title = stringResource(MR.strings.check_for_updates),
@@ -123,7 +121,7 @@ object AboutScreen : Screen() {
                                                     versionName = result.release.version,
                                                     changelogInfo = result.release.info,
                                                     releaseLink = result.release.releaseLink,
-                                                    downloadLink = result.release.downloadLink,
+                                                    downloadLink = result.release.getDownloadLink(),
                                                 )
                                                 navigator.push(updateScreen)
                                             },
@@ -171,32 +169,22 @@ object AboutScreen : Screen() {
                         LinkIcon(
                             label = stringResource(MR.strings.website),
                             icon = Icons.Outlined.Public,
-                            url = "https://mihon.app",
+                            url = "https://github.com/mannu691",
                         )
                         LinkIcon(
                             label = "Discord",
                             icon = CustomIcons.Discord,
-                            url = "https://discord.gg/mihon",
-                        )
-                        LinkIcon(
-                            label = "X",
-                            icon = CustomIcons.X,
-                            url = "https://x.com/mihonapp",
-                        )
-                        LinkIcon(
-                            label = "Facebook",
-                            icon = CustomIcons.Facebook,
-                            url = "https://facebook.com/mihonapp",
+                            url = "https://discord.com/invite/rkvXfVPRdq",
                         )
                         LinkIcon(
                             label = "Reddit",
                             icon = CustomIcons.Reddit,
-                            url = "https://www.reddit.com/r/mihonapp",
+                            url = "https://www.reddit.com/user/Mannu_Gaming/",
                         )
                         LinkIcon(
                             label = "GitHub",
                             icon = CustomIcons.Github,
-                            url = "https://github.com/mihonapp",
+                            url = "https://github.com/mannu691",
                         )
                     }
                 }
@@ -225,6 +213,7 @@ object AboutScreen : Screen() {
                     is GetApplicationRelease.Result.OsTooOld -> {
                         context.toast(MR.strings.update_check_eol)
                     }
+                    else -> {}
                 }
             } catch (e: Exception) {
                 context.toast(e.message)
@@ -246,7 +235,7 @@ object AboutScreen : Screen() {
                     }
                 }
             }
-            isPreviewBuildType -> {
+            BuildConfig.PREVIEW -> {
                 "Beta r${BuildConfig.COMMIT_COUNT}".let {
                     if (withBuildDate) {
                         "$it (${BuildConfig.COMMIT_SHA}, ${getFormattedBuildTime()})"

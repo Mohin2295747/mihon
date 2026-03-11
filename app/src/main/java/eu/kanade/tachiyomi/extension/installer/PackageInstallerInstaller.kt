@@ -1,6 +1,5 @@
 package eu.kanade.tachiyomi.extension.installer
 
-import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
@@ -83,7 +82,6 @@ class PackageInstallerInstaller(private val service: Service) : Installer(servic
                     inputStream.copyTo(outputStream)
                     session.fsync(outputStream)
                 }
-                service.contentResolver.delete(entry.uri, null, null)
 
                 val intentSender = PendingIntent.getBroadcast(
                     service,
@@ -91,7 +89,6 @@ class PackageInstallerInstaller(private val service: Service) : Installer(servic
                     Intent(INSTALL_ACTION).setPackage(service.packageName),
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0,
                 ).intentSender
-                @SuppressLint("RequestInstallPackagesPolicy")
                 session.commit(intentSender)
             }
         } catch (e: Exception) {

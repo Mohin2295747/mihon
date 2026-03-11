@@ -1,10 +1,15 @@
 package eu.kanade.presentation.more
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.Label
-import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.GetApp
 import androidx.compose.material.icons.outlined.Info
@@ -35,6 +40,7 @@ fun MoreScreen(
     onDownloadedOnlyChange: (Boolean) -> Unit,
     incognitoMode: Boolean,
     onIncognitoModeChange: (Boolean) -> Unit,
+    isFDroid: Boolean,
     onClickDownloadQueue: () -> Unit,
     onClickCategories: () -> Unit,
     onClickStats: () -> Unit,
@@ -44,7 +50,19 @@ fun MoreScreen(
 ) {
     val uriHandler = LocalUriHandler.current
 
-    Scaffold { contentPadding ->
+    Scaffold(
+        topBar = {
+            Column(
+                modifier = Modifier.windowInsetsPadding(
+                    WindowInsets.systemBars.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+                ),
+            ) {
+                if (isFDroid) {
+                    // Don't really care about slow updaters now
+                }
+            }
+        },
+    ) { contentPadding ->
         ScrollbarLazyColumn(
             modifier = Modifier.padding(contentPadding),
         ) {
@@ -144,13 +162,6 @@ fun MoreScreen(
                     title = stringResource(MR.strings.label_help),
                     icon = Icons.AutoMirrored.Outlined.HelpOutline,
                     onPreferenceClick = { uriHandler.openUri(Constants.URL_HELP) },
-                )
-            }
-            item {
-                TextPreferenceWidget(
-                    title = stringResource(MR.strings.label_donate),
-                    icon = Icons.Outlined.AttachMoney,
-                    onPreferenceClick = { uriHandler.openUri(Constants.URL_DONATE) },
                 )
             }
         }
