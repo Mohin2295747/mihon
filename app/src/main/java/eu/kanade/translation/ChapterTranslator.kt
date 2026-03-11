@@ -47,6 +47,7 @@ import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.domain.translation.TranslationPreferences
 import tachiyomi.i18n.at.ATMR
+import tachiyomi.source.local.LocalSource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.InputStream
@@ -176,19 +177,23 @@ class ChapterTranslator(
     }
 
     fun queueChapter(manga: Manga, chapter: Chapter) {
-        val source = sourceManager.get(manga.source) as? HttpSource ?: return
-        if (provider.findTranslationFile(chapter.name, chapter.scanlator, manga.title, source) != null) return
-        if (queueState.value.any { it.chapter.id == chapter.id }) return
-        val fromLang = TextRecognizerLanguage.fromPref(translationPreferences.translateFromLanguage())
-        val toLang = TextTranslatorLanguage.fromPref(translationPreferences.translateToLanguage())
-        val engine = TextTranslators.fromPref(translationPreferences.translationEngine())
-        if (engine == TextTranslators.MLKIT && !TextTranslatorLanguage.mlkitSupportedLanguages().contains(toLang)) {
-            context.toast(ATMR.strings.error_mlkit_language_unsupported)
-            return
-        }
-        val translation = Translation(source, manga, chapter, fromLang, toLang)
-        addToQueue(translation)
+    val source = sourceManager.get(manga.source) ?: return
+    
+    // Allow both HttpSource and LocalSource
+    if (source !is HttpSource && source !is LocalSource) return
+    
+    if (provider.findTranslationFile(chapter.name, chapter.scanlator, manga.title, source) != null) return
+    if (queueState.value.any { it.chapter.id == chapter.id }) return
+    val fromLang = TextRecognizerLanguage.fromPref(translationPreferences.translateFromLanguage())
+    val toLang = TextTranslatorLanguage.fromPref(translationPreferences.translateToLanguage())
+    val engine = TextTranslators.fromPref(translationPreferences.translationEngine())
+    if (engine == TextTranslators.MLKIT && !TextTranslatorLanguage.mlkitSupportedLanguages().contains(toLang)) {
+        context.toast(ATMR.strings.error_mlkit_language_unsupported)
+        return
     }
+    val translation = Translation(source, manga, chapter, fromLang, toLang)
+    addToQueue(translation)
+}
 
     private suspend fun translateChapter(translation: Translation) {
         try {
