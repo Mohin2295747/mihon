@@ -215,16 +215,16 @@ class ChapterTranslator(
 
                 val sourceDirPath = sourceDir.uri.path ?: throw Exception("Invalid source directory path")
                 val downloadsDirPath = sourceDirPath.substringBeforeLast("/")
-                val downloadsDir = UniFile.fromFile(context, java.io.File(downloadsDirPath))
+                val downloadsDir = UniFile.fromFile(java.io.File(downloadsDirPath))
                 
                 val rootDirPath = downloadsDirPath.substringBeforeLast("/")
-                val rootDir = UniFile.fromFile(context, java.io.File(rootDirPath))
+                val rootDir = UniFile.fromFile(java.io.File(rootDirPath))
 
-                val localDir = rootDir.findFile("local")
-                    ?: throw Exception("Local directory not found at ${rootDir.uri}/local/")
+                val localDir = rootDir?.findFile("local")
+                    ?: throw Exception("Local directory not found at ${rootDir?.uri}/local/")
 
                 val mangaDirName = downloadProvider.getMangaDirName(translation.manga.title)
-                val mangaDir = localDir.findFile(mangaDirName)
+                val mangaDir = localDir?.findFile(mangaDirName)
                     ?: throw Exception("Manga directory not found: ${translation.manga.title}")
 
                 val chapterDirNames = downloadProvider.getValidChapterDirNames(
@@ -233,7 +233,7 @@ class ChapterTranslator(
                 )
 
                 chapterDirNames.asSequence()
-                    .mapNotNull { mangaDir.findFile(it) }
+                    .mapNotNull { mangaDir?.findFile(it) }
                     .firstOrNull() ?: throw Exception("Chapter not found: ${translation.chapter.name}")
             } else {
                 downloadProvider.findChapterDir(
