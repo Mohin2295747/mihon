@@ -210,8 +210,13 @@ class ChapterTranslator(
             val saveFile = provider.getTranslationFileName(translation.chapter.name, translation.chapter.scanlator)
 
             val chapterPath = if (translation.source is LocalSource) {
-                // For local source: files are in /storage/emulated/0/Download/TachiyomiAT/local/manga_title/chapter/
-                val rootDir = downloadProvider.downloadsDirectory?.parent
+                val sourceDir = downloadProvider.findSourceDir(translation.source)
+                    ?: throw Exception("Source directory not found")
+
+                val downloadsDir = sourceDir.parent
+                    ?: throw Exception("Downloads directory not found")
+
+                val rootDir = downloadsDir.parent
                     ?: throw Exception("Root directory not found")
 
                 val localDir = rootDir.findFile("local")
@@ -245,7 +250,11 @@ class ChapterTranslator(
             withContext(Dispatchers.IO) {
                 for ((fileName, streamFn) in streams) {
                     coroutineContext.ensureActive()
-                    streamFn().use { tmpFile.openOutputStream().use { out -> it.copyTo(out) } }
+                    streamFn().use { inputStream ->
+                        tmpFile.openOutputStream().use { outputStream ->
+                            inputStream.copyTo(outputStream)
+                        }
+                    }
                     val image = InputImage.fromFilePath(context, tmpFile.uri)
                     val result = textRecognizer.recognize(image)
                     val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
