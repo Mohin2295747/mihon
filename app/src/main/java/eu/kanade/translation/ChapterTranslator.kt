@@ -49,6 +49,7 @@ import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.domain.translation.TranslationPreferences
 import tachiyomi.i18n.at.ATMR
 import tachiyomi.source.local.LocalSource
+import tachiyomi.source.local.io.Format
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.InputStream
@@ -210,31 +211,20 @@ class ChapterTranslator(
             val saveFile = provider.getTranslationFileName(translation.chapter.name, translation.chapter.scanlator)
 
             val chapterPath = if (translation.source is LocalSource) {
-                val sourceDir = downloadProvider.findSourceDir(translation.source)
-                    ?: throw Exception("Source directory not found")
-
-                val sourceDirPath = sourceDir.uri.path ?: throw Exception("Invalid source directory path")
-                val downloadsDirPath = sourceDirPath.substringBeforeLast("/")
-                val downloadsDir = UniFile.fromFile(java.io.File(downloadsDirPath))
+                val localSource = translation.source as LocalSource
+                val sChapter = translation.chapter.toSChapter()
+                val format = try {
+                    localSource.getFormat(sChapter)
+                } catch (e: Exception) {
+                    throw Exception("Failed to get local chapter format: ${e.message}")
+                }
                 
-                val rootDirPath = downloadsDirPath.substringBeforeLast("/")
-                val rootDir = UniFile.fromFile(java.io.File(rootDirPath))
-
-                val localDir = rootDir?.findFile("local")
-                    ?: throw Exception("Local directory not found at ${rootDir?.uri}/local/")
-
-                val mangaDirName = downloadProvider.getMangaDirName(translation.manga.title)
-                val mangaDir = localDir?.findFile(mangaDirName)
-                    ?: throw Exception("Manga directory not found: ${translation.manga.title}")
-
-                val chapterDirNames = downloadProvider.getValidChapterDirNames(
-                    translation.chapter.name,
-                    translation.chapter.scanlator
-                )
-
-                chapterDirNames.asSequence()
-                    .mapNotNull { mangaDir?.findFile(it) }
-                    .firstOrNull() ?: throw Exception("Chapter not found: ${translation.chapter.name}")
+                when (format) {
+                    is Format.Directory -> format.file
+                    is Format.Archive -> format.file
+                    is Format.Epub -> format.file
+                    else -> throw Exception("Unsupported format for local chapter")
+                }
             } else {
                 downloadProvider.findChapterDir(
                     translation.chapter.name,
@@ -484,5 +474,15 @@ class ChapterTranslator(
             }
             emptyList()
         }
+    }
+}
+
+private fun Chapter.toSChapter(): eu.kanade.tachiyomi.source.model.SChapter {
+    return eu.kanade.tachiyomi.source.model.SChapter.create().apply {
+        url = this@toSChapter.url
+        name = this@toSChapter.name
+        chapter_number = this@toSChapter.chapterNumber.toFloat()
+        date_upload = this@toSChapter.dateUpload
+        scanlator = this@toSChapter.scanlator
     }
 }
