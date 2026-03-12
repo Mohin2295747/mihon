@@ -208,17 +208,40 @@ class ChapterTranslator(
             }
             val translationMangaDir = provider.getMangaDir(translation.manga.title, translation.source)
             val saveFile = provider.getTranslationFileName(translation.chapter.name, translation.chapter.scanlator)
-            val chapterPath = downloadProvider.findChapterDir(
-                translation.chapter.name,
-                translation.chapter.scanlator,
-                translation.manga.title,
-                translation.source,
-            )!!
+
+            val chapterPath = if (translation.source is LocalSource) {
+                // For local source: files are in /storage/emulated/0/Download/TachiyomiAT/local/manga_title/chapter/
+                val rootDir = downloadProvider.downloadsDirectory?.parent
+                    ?: throw Exception("Root directory not found")
+
+                val localDir = rootDir.findFile("local")
+                    ?: throw Exception("Local directory not found at ${rootDir.uri}/local/")
+
+                val mangaDirName = downloadProvider.getMangaDirName(translation.manga.title)
+                val mangaDir = localDir.findFile(mangaDirName)
+                    ?: throw Exception("Manga directory not found: ${translation.manga.title}")
+
+                val chapterDirNames = downloadProvider.getValidChapterDirNames(
+                    translation.chapter.name,
+                    translation.chapter.scanlator
+                )
+
+                chapterDirNames.asSequence()
+                    .mapNotNull { mangaDir.findFile(it) }
+                    .firstOrNull() ?: throw Exception("Chapter not found: ${translation.chapter.name}")
+            } else {
+                downloadProvider.findChapterDir(
+                    translation.chapter.name,
+                    translation.chapter.scanlator,
+                    translation.manga.title,
+                    translation.source,
+                ) ?: throw Exception("Chapter directory not found for ${translation.chapter.name}")
+            }
 
             val pages = mutableMapOf<String, PageTranslation>()
             val tmpFile = translationMangaDir.createFile("tmp")!!
             val streams = getChapterPages(chapterPath)
-            
+
             withContext(Dispatchers.IO) {
                 for ((fileName, streamFn) in streams) {
                     coroutineContext.ensureActive()
