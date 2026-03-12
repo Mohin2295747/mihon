@@ -213,11 +213,12 @@ class ChapterTranslator(
                 val sourceDir = downloadProvider.findSourceDir(translation.source)
                     ?: throw Exception("Source directory not found")
 
-                val downloadsDir = sourceDir.parent
-                    ?: throw Exception("Downloads directory not found")
-
-                val rootDir = downloadsDir.parent
-                    ?: throw Exception("Root directory not found")
+                val sourceDirPath = sourceDir.uri.path ?: throw Exception("Invalid source directory path")
+                val downloadsDirPath = sourceDirPath.substringBeforeLast("/")
+                val downloadsDir = UniFile.fromFile(context, java.io.File(downloadsDirPath))
+                
+                val rootDirPath = downloadsDirPath.substringBeforeLast("/")
+                val rootDir = UniFile.fromFile(context, java.io.File(rootDirPath))
 
                 val localDir = rootDir.findFile("local")
                     ?: throw Exception("Local directory not found at ${rootDir.uri}/local/")
@@ -250,10 +251,13 @@ class ChapterTranslator(
             withContext(Dispatchers.IO) {
                 for ((fileName, streamFn) in streams) {
                     coroutineContext.ensureActive()
-                    streamFn().use { inputStream ->
+                    val inputStream = streamFn()
+                    try {
                         tmpFile.openOutputStream().use { outputStream ->
                             inputStream.copyTo(outputStream)
                         }
+                    } finally {
+                        inputStream.close()
                     }
                     val image = InputImage.fromFilePath(context, tmpFile.uri)
                     val result = textRecognizer.recognize(image)
