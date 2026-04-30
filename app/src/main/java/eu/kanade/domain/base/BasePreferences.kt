@@ -17,12 +17,20 @@ class BasePreferences(
         false,
     )
 
-    val incognitoMode: Preference<Boolean> = preferenceStore.getBoolean(Preference.appStateKey("incognito_mode"), false)
+    val incognitoMode: Preference<Boolean> = preferenceStore.getBoolean(
+        Preference.appStateKey("incognito_mode"),
+        false,
+    )
 
     val extensionInstaller: ExtensionInstallerPreference = ExtensionInstallerPreference(context, preferenceStore)
 
     val shownOnboardingFlow: Preference<Boolean> = preferenceStore.getBoolean(
         Preference.appStateKey("onboarding_complete"),
+        false,
+    )
+
+    fun shizukuReinstallOnFailure(): Preference<Boolean> = preferenceStore.getBoolean(
+        Preference.appStateKey("pref_shizuku_reinstall_on_failure"),
         false,
     )
 
@@ -33,7 +41,10 @@ class BasePreferences(
         PRIVATE(MR.strings.ext_installer_private, false),
     }
 
-    val displayProfile: Preference<String> = preferenceStore.getString("pref_display_profile_key", "")
+    val displayProfile: Preference<String> = preferenceStore.getString(
+        "pref_display_profile_key",
+        "",
+    )
 
     val hardwareBitmapThreshold: Preference<Int> = preferenceStore.getInt(
         "pref_hardware_bitmap_threshold",
@@ -45,7 +56,10 @@ class BasePreferences(
         false,
     )
 
-    val installationId: Preference<String> = preferenceStore.getString(Preference.appStateKey("installation_id"), "")
+    val installationId: Preference<String> = preferenceStore.getString(
+        Preference.appStateKey("installation_id"),
+        "",
+    )
 
     val donationCampaignShown: Preference<Boolean> = preferenceStore.getBoolean(
         Preference.appStateKey("donation_campaign_shown"),
