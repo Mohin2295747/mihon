@@ -9,24 +9,30 @@ import tachiyomi.i18n.MR
 
 class BasePreferences(
     val context: Context,
-    private val preferenceStore: PreferenceStore,
+    preferenceStore: PreferenceStore,
 ) {
 
-    fun downloadedOnly() = preferenceStore.getBoolean(
+    val downloadedOnly: Preference<Boolean> = preferenceStore.getBoolean(
         Preference.appStateKey("pref_downloaded_only"),
         false,
     )
 
-    fun incognitoMode() = preferenceStore.getBoolean(Preference.appStateKey("incognito_mode"), false)
-
-    fun extensionInstaller() = ExtensionInstallerPreference(context, preferenceStore)
-
-    fun shizukuReinstallOnFailure() = preferenceStore.getBoolean(
-        Preference.appStateKey("pref_shizuku_reinstall_on_failure"),
+    val incognitoMode: Preference<Boolean> = preferenceStore.getBoolean(
+        Preference.appStateKey("incognito_mode"),
         false,
     )
 
-    fun shownOnboardingFlow() = preferenceStore.getBoolean(Preference.appStateKey("onboarding_complete"), false)
+    val extensionInstaller: ExtensionInstallerPreference = ExtensionInstallerPreference(context, preferenceStore)
+
+    val shownOnboardingFlow: Preference<Boolean> = preferenceStore.getBoolean(
+        Preference.appStateKey("onboarding_complete"),
+        false,
+    )
+
+    fun shizukuReinstallOnFailure(): Preference<Boolean> = preferenceStore.getBoolean(
+        Preference.appStateKey("pref_shizuku_reinstall_on_failure"),
+        false,
+    )
 
     enum class ExtensionInstaller(val titleRes: StringResource, val requiresSystemPermission: Boolean) {
         LEGACY(MR.strings.ext_installer_legacy, true),
@@ -35,9 +41,28 @@ class BasePreferences(
         PRIVATE(MR.strings.ext_installer_private, false),
     }
 
-    fun displayProfile() = preferenceStore.getString("pref_display_profile_key", "")
+    val displayProfile: Preference<String> = preferenceStore.getString(
+        "pref_display_profile_key",
+        "",
+    )
 
-    fun hardwareBitmapThreshold() = preferenceStore.getInt("pref_hardware_bitmap_threshold", GLUtil.SAFE_TEXTURE_LIMIT)
+    val hardwareBitmapThreshold: Preference<Int> = preferenceStore.getInt(
+        "pref_hardware_bitmap_threshold",
+        GLUtil.SAFE_TEXTURE_LIMIT,
+    )
 
-    fun alwaysDecodeLongStripWithSSIV() = preferenceStore.getBoolean("pref_always_decode_long_strip_with_ssiv", false)
+    val alwaysDecodeLongStripWithSSIV: Preference<Boolean> = preferenceStore.getBoolean(
+        "pref_always_decode_long_strip_with_ssiv",
+        false,
+    )
+
+    val installationId: Preference<String> = preferenceStore.getString(
+        Preference.appStateKey("installation_id"),
+        "",
+    )
+
+    val donationCampaignShown: Preference<Boolean> = preferenceStore.getBoolean(
+        Preference.appStateKey("donation_campaign_shown"),
+        false,
+    )
 }
