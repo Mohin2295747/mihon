@@ -9,7 +9,7 @@ import tachiyomi.i18n.MR
 
 class BasePreferences(
     val context: Context,
-    preferenceStore: PreferenceStore,
+    private val preferenceStore: PreferenceStore,
 ) {
 
     val downloadedOnly: Preference<Boolean> = preferenceStore.getBoolean(
