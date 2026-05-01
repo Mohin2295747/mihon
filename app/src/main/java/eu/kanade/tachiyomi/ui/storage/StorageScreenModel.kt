@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.transformLatest
@@ -70,9 +69,7 @@ class StorageScreenModel(
             combine(
                 downloadCacheFlow,
                 downloadCache.isInitializing,
-                getLibraryManga.subscribe().distinctUntilChanged { old, new ->
-                    old.map { Pair(it.id, it.category) }.toSet() == new.map { Pair(it.id, it.category) }.toSet()
-                },
+                getLibraryManga.subscribe(),
                 getCategories.subscribe(),
             ) { _, _, libraries, categories ->
                 val distinctEntries = libraries.fastDistinctBy {
