@@ -1,0 +1,225 @@
+name: Weekly Build
+on:
+  schedule:
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  sync-and-build:
+    name: Sync & Weekly Build
+    runs-on: 'ubuntu-24.04'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_WEEKLY }}
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync with upstream
+        id: sync
+        run: |
+          if ! git remote get-url upstream &>/dev/null; then
+            git remote add upstream https://github.com/mihonapp/mihon.git
+          fi
+          git fetch upstream main
+          PREVIOUS_COMMIT=$(git rev-parse HEAD)
+          if git merge upstream/main --allow-unrelated-histories --no-ff --no-edit; then
+            echo "merge_success=true" >> $GITHUB_OUTPUT
+            echo "has_new_commits=true" >> $GITHUB_OUTPUT
+            NEW_COMMIT=$(git rev-parse HEAD)
+            echo "new_commit=$NEW_COMMIT" >> $GITHUB_OUTPUT
+            if [ "$PREVIOUS_COMMIT" != "$NEW_COMMIT" ]; then
+              echo "changes_made=true" >> $GITHUB_OUTPUT
+              git push origin mihonapp/mihon
+            else
+              echo "changes_made=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "merge_success=false" >> $GITHUB_OUTPUT
+            git merge --abort
+            exit 1
+          fi
+
+      - name: Get version info
+        id: version
+        run: |
+          VERSION_CODE=$(grep -oP 'versionCode\s+\K\d+' app/build.gradle.kts || echo "0")
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+          COMMIT_HASH=$(git rev-parse --short=7 HEAD)
+          echo "commit_hash=$COMMIT_HASH" >> $GITHUB_OUTPUT
+          PREVIOUS_TAG=$(git tag --sort=-version:refname | head -n1 || echo "")
+          echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
+          if [ -n "$PREVIOUS_TAG" ] && [[ "$PREVIOUS_TAG" == v${VERSION_CODE}-* ]]; then
+            PREVIOUS_COMMIT=$(echo "$PREVIOUS_TAG" | grep -oP 'v\d+-\K[^-]+' || echo "")
+            echo "previous_commit=$PREVIOUS_COMMIT" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify signing key
+        id: verify_signing
+        shell: bash
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+        run: |
+          if [ -z "$SIGNING_KEY" ]; then
+            echo "Error: SIGNING_KEY secret is not set"
+            exit 1
+          fi
+          if [ -z "$KEY_STORE_PASSWORD" ]; then
+            echo "Error: KEY_STORE_PASSWORD secret is not set"
+            exit 1
+          fi
+          printf '%s' "$SIGNING_KEY" | base64 -d > /tmp/keystore.jks
+          keytool -list -keystore /tmp/keystore.jks -storepass "$KEY_STORE_PASSWORD" >/dev/null
+          echo "signing_key_valid=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify alias
+        id: verify_alias
+        shell: bash
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          ALIAS: ${{ secrets.ALIAS }}
+        run: |
+          printf '%s' "$SIGNING_KEY" | base64 -d > /tmp/keystore.jks
+          keytool -list -keystore /tmp/keystore.jks -storepass "$KEY_STORE_PASSWORD" -alias "$ALIAS"
+          echo "alias_valid=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build app
+        if: steps.verify_signing.outputs.signing_key_valid == 'true' && steps.verify_alias.outputs.alias_valid == 'true'
+        run: ./gradlew assembleRelease -Pinclude-telemetry -Penable-updater
+        env:
+          MIHON_GITHUB_RELEASE: true
+          storeFileBase64: ${{ secrets.SIGNING_KEY }}
+          storePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+          keyAlias: ${{ secrets.ALIAS }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+
+      - name: Upload APK as artifact
+        if: steps.verify_signing.outputs.signing_key_valid == 'true' && steps.verify_alias.outputs.alias_valid == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mihon-arm64-weekly-${{ steps.version.outputs.commit_hash }}
+          path: app/build/outputs/apk/release/app-arm64-v8a-release.apk
+          retention-days: 7
+
+      - name: Generate release notes
+        id: release_notes
+        if: steps.verify_signing.outputs.signing_key_valid == 'true' && steps.verify_alias.outputs.alias_valid == 'true'
+        run: |
+          if [ -n "${{ steps.version.outputs.previous_commit }}" ]; then
+            COMMITS=$(git log ${{ steps.version.outputs.previous_commit }}..HEAD --pretty=format:"- %s" --reverse)
+          else
+            COMMITS=$(git log --pretty=format:"- %s" --reverse | head -20)
+          fi
+          DATE=$(date +'%B %d, %Y')
+          cat << EOF > release_notes.md
+          ## 📦 Weekly Build - $DATE
+          
+          **Version Code:** ${{ steps.version.outputs.version_code }}
+          **Commit:** \`${{ steps.version.outputs.commit_hash }}\`
+          
+          ### 📝 Changes since last release:
+          
+          $COMMITS
+          
+          ---
+          *This is an automated weekly build from the latest upstream commits.*
+          EOF
+          echo "release_notes=release_notes.md" >> $GITHUB_OUTPUT
+
+      - name: Create/Update Release
+        id: create_release
+        if: steps.verify_signing.outputs.signing_key_valid == 'true' && steps.verify_alias.outputs.alias_valid == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION_CODE=${{ steps.version.outputs.version_code }}
+          COMMIT_HASH=${{ steps.version.outputs.commit_hash }}
+          TAG_NAME="v${VERSION_CODE}-${COMMIT_HASH}"
+          if gh release view "$TAG_NAME" &>/dev/null; then
+            gh release upload "$TAG_NAME" app/build/outputs/apk/release/app-arm64-v8a-release.apk --clobber
+            gh release edit "$TAG_NAME" --notes-file "${{ steps.release_notes.outputs.release_notes }}"
+            echo "release_updated=true" >> $GITHUB_OUTPUT
+          else
+            gh release create "$TAG_NAME" \
+              app/build/outputs/apk/release/app-arm64-v8a-release.apk \
+              --title "Weekly Build v${VERSION_CODE} (${COMMIT_HASH})" \
+              --notes-file "${{ steps.release_notes.outputs.release_notes }}" \
+              --prerelease
+            echo "release_created=true" >> $GITHUB_OUTPUT
+          fi
+          echo "release_tag=$TAG_NAME" >> $GITHUB_OUTPUT
+
+      - name: Keep only latest 5 releases
+        if: steps.verify_signing.outputs.signing_key_valid == 'true' && steps.verify_alias.outputs.alias_valid == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RELEASES=$(gh release list --limit 100 --json tagName --jq '.[].tagName' | sort -Vr)
+          COUNT=0
+          for RELEASE in $RELEASES; do
+            COUNT=$((COUNT + 1))
+            if [ $COUNT -gt 5 ]; then
+              gh release delete "$RELEASE" --yes
+              git push origin --delete "$RELEASE" || true
+            fi
+          done
+
+      - name: Build summary
+        if: always()
+        run: |
+          echo "## Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Date: $(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_STEP_SUMMARY
+          echo "- Version Code: ${{ steps.version.outputs.version_code }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: \`${{ steps.version.outputs.commit_hash }}\`" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.sync.outputs.changes_made }}" == "true" ]; then
+            echo "- New commits: ✅ Merged" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- New commits: ⏭️ No new commits" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ steps.verify_signing.outputs.signing_key_valid }}" == "true" ] && [ "${{ steps.verify_alias.outputs.alias_valid }}" == "true" ]; then
+            echo "- APK Artifact: ✅ Uploaded" >> $GITHUB_STEP_SUMMARY
+            if [ "${{ steps.create_release.outputs.release_created }}" == "true" ]; then
+              echo "- Release: ✅ Created \`${{ steps.create_release.outputs.release_tag }}\`" >> $GITHUB_STEP_SUMMARY
+            elif [ "${{ steps.create_release.outputs.release_updated }}" == "true" ]; then
+              echo "- Release: ✅ Updated \`${{ steps.create_release.outputs.release_tag }}\`" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- Release: ⏭️ No changes needed" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "- Release: ❌ Skipped (signing verification failed)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Skip build - Verification failed
+        if: steps.verify_signing.outputs.signing_key_valid != 'true' || steps.verify_alias.outputs.alias_valid != 'true'
+        run: |
+          echo "Build skipped due to signing key verification failure"
+          exit 1
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf /tmp/keystore.jks
+          rm -rf app/build
+          rm -f release_notes.md
