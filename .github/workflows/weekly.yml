@@ -151,7 +151,7 @@ jobs:
         id: create_release
         if: steps.verify_signing.outputs.signing_key_valid == 'true' && steps.verify_alias.outputs.alias_valid == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PAT_WEEKLY }}
         run: |
           VERSION_CODE=${{ steps.version.outputs.version_code }}
           COMMIT_HASH=${{ steps.version.outputs.commit_hash }}
@@ -173,7 +173,7 @@ jobs:
       - name: Keep only latest 5 releases
         if: steps.verify_signing.outputs.signing_key_valid == 'true' && steps.verify_alias.outputs.alias_valid == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PAT_WEEKLY }}
         run: |
           RELEASES=$(gh release list --limit 100 --json tagName --jq '.[].tagName' | sort -Vr)
           COUNT=0
