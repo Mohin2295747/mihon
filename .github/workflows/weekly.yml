@@ -167,7 +167,6 @@ jobs:
               app/build/outputs/apk/release/app-arm64-v8a-release.apk \
               --title "Weekly Build v${VERSION_CODE} (${COMMIT_HASH})" \
               --notes-file "${{ steps.release_notes.outputs.release_notes }}" \
-              --prerelease \
               --repo "$REPO"
             echo "release_created=true" >> $GITHUB_OUTPUT
           fi
