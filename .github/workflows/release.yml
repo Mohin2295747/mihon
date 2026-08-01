@@ -1,8 +1,6 @@
 name: Release
 on:
-  push:
-    tags:
-      - v*
+  workflow_dispatch:
 
 env:
   MIHON_GITHUB_RELEASE: true
